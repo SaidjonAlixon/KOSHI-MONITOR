@@ -1,8 +1,9 @@
-import { Activity, ArrowRight, BarChart3, BellRing, Eye, FileSearch, Lock, MonitorSmartphone, ShieldCheck, SlidersHorizontal, Users } from 'lucide-react'
+import { Activity, ArrowRight, BarChart3, BellRing, Download, Eye, FileSearch, Lock, MonitorSmartphone, ShieldCheck, SlidersHorizontal, Users } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { Link } from 'react-router'
 import { KoshiIcon, KoshiLogo } from '@/components/Brand'
 import { useAuth } from '@/lib/auth'
+import { AGENT_INSTALLER } from '@/lib/labels'
 
 const features: { icon: ComponentType<{ className?: string }>; title: string; text: string }[] = [
   { icon: Activity, title: 'Live Monitoring', text: 'Faol dastur, maskalangan oyna nomi, faol/idle holat va agent aloqasi real vaqtda.' },
@@ -26,20 +27,26 @@ export function LandingPage() {
 
   return (
     <div className="min-h-full bg-ink-950 text-slate-200">
-      <header className="sticky top-0 z-30 border-b border-white/5 bg-ink-950/80 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <Link to="/" className="flex items-center gap-3" aria-label="KOSHI bosh sahifa">
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
+          <Link to="/" className="flex items-center" aria-label="KOSHI bosh sahifa">
             <KoshiIcon className="size-9" />
-            <KoshiLogo className="h-6" />
+            <KoshiLogo className="ml-2 h-7" />
           </Link>
-          <nav className="hidden items-center gap-8 text-sm text-slate-400 md:flex">
-            <a href="#features" className="hover:text-white">Imkoniyatlar</a>
-            <a href="#how" className="hover:text-white">Qanday ishlaydi</a>
-            <a href="#privacy" className="hover:text-white">Maxfiylik</a>
+          <nav className="hidden items-center gap-8 text-sm font-medium text-slate-600 md:flex">
+            <a href="#features" className="hover:text-brand-700">Imkoniyatlar</a>
+            <a href="#how" className="hover:text-brand-700">Qanday ishlaydi</a>
+            <a href="#download" className="hover:text-brand-700">Yuklab olish</a>
+            <a href="#privacy" className="hover:text-brand-700">Maxfiylik</a>
           </nav>
-          <Link to={cta.to} className="brand-gradient rounded-xl px-4 py-2 text-sm font-medium text-white shadow-lg shadow-brand-600/30 hover:brightness-110">
-            {user ? 'Panel' : 'Kirish'}
-          </Link>
+          <div className="flex items-center gap-2">
+            <a href={AGENT_INSTALLER} download className="hidden items-center gap-2 rounded-xl border border-slate-200 px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 sm:inline-flex">
+              <Download className="size-4" /> Agent (EXE)
+            </a>
+            <Link to={cta.to} className="brand-gradient rounded-xl px-4 py-2 text-sm font-medium text-white shadow-lg shadow-brand-600/30 hover:brightness-110">
+              {user ? 'Panel' : 'Kirish'}
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -58,12 +65,12 @@ export function LandingPage() {
               KOSHI — xodimlarga biriktirilgan Windows kompyuterlarni monitoring qilish, dastur siyosatlarini qo‘llash va mehnat unumdorligini ishonchli tahlil qilish platformasi.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link to={cta.to} className="brand-gradient inline-flex items-center gap-2 rounded-xl px-5 py-3 font-medium text-white shadow-lg shadow-brand-600/30 hover:brightness-110">
+              <a href={AGENT_INSTALLER} download className="brand-gradient inline-flex items-center gap-2 rounded-xl px-5 py-3 font-medium text-white shadow-lg shadow-brand-600/30 hover:brightness-110">
+                <Download className="size-4" /> Agentni yuklab olish (EXE)
+              </a>
+              <Link to={cta.to} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-5 py-3 font-medium text-slate-100 hover:bg-white/10">
                 {cta.label} <ArrowRight className="size-4" />
               </Link>
-              <a href="#how" className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-5 py-3 font-medium text-slate-200 hover:bg-white/5">
-                Qanday ishlaydi
-              </a>
             </div>
           </div>
           <div className="relative">
@@ -118,6 +125,28 @@ export function LandingPage() {
               <p className="mt-2 text-sm text-slate-400">{d}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section id="download" className="mx-auto max-w-6xl px-6 py-20">
+        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-brand-600/20 via-ink-900 to-accent-600/20 p-10 text-center">
+          <div className="pointer-events-none absolute -right-20 -top-20 size-64 rounded-full bg-brand-500/20 blur-3xl" />
+          <span className="brand-gradient mx-auto inline-flex rounded-2xl p-3 text-white shadow-lg shadow-brand-600/30">
+            <Download className="size-6" />
+          </span>
+          <h2 className="mt-4 text-2xl font-bold text-white">KOSHI Agentni yuklab oling</h2>
+          <p className="mx-auto mt-3 max-w-2xl text-slate-400">
+            Windows uchun o‘rnatuvchi (EXE). Administrator sifatida o‘rnatiladi, bir martalik aktivatsiya kodi bilan serverga ulanadi va kompyuter admin panelda paydo bo‘ladi.
+          </p>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <a href={AGENT_INSTALLER} download className="brand-gradient inline-flex items-center gap-2 rounded-xl px-6 py-3 font-semibold text-white shadow-lg shadow-brand-600/30 hover:brightness-110">
+              <Download className="size-5" /> Windows uchun yuklab olish
+            </a>
+            <span className="text-xs text-slate-500">Windows 10/11 · 64-bit · ~77 MB</span>
+          </div>
+          <p className="mx-auto mt-4 max-w-xl text-xs text-slate-500">
+            Aktivatsiya kodini admin panelidagi “Qurilmalar → Qurilma qo‘shish” bo‘limidan oling. O‘rnatgandan so‘ng agent xodimga ko‘rinadigan tray indikatori bilan ishlaydi.
+          </p>
         </div>
       </section>
 
