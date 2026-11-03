@@ -1,6 +1,6 @@
 import { HubConnectionBuilder, HubConnectionState, LogLevel, type HubConnection } from '@microsoft/signalr'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Lock, LogOut, Maximize, MessageSquare, Play, Power, RotateCcw, Square, XCircle, XOctagon } from 'lucide-react'
+import { ArrowLeft, Eye, Lock, LogOut, Maximize, MessageSquare, MousePointerClick, Power, RotateCcw, Square, XCircle, XOctagon } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type WheelEvent } from 'react'
 import { Link, useParams } from 'react-router'
 import { PageHeader, Select } from '@/components/forms'
@@ -37,6 +37,7 @@ export function RemotePage() {
   const [quality, setQuality] = useState<keyof typeof QUALITY>('medium')
   const [fps, setFps] = useState(0)
   const [log, setLog] = useState<string[]>([])
+  const [controlEnabled, setControlEnabled] = useState(false)
   const frameCount = useRef(0)
 
   const addLog = useCallback((s: string) => setLog((l) => [`${new Date().toLocaleTimeString('uz-UZ')} — ${s}`, ...l].slice(0, 8)), [])
@@ -104,16 +105,17 @@ export function RemotePage() {
     }
   }, [addLog])
 
-  const start = async () => {
+  const start = async (control: boolean) => {
     const conn = connRef.current
     if (!conn) return
+    setControlEnabled(control)
     setStatus('starting')
     setMessage('')
     try {
       const q = QUALITY[quality]
       sessionRef.current = await conn.invoke<string>('Start', deviceId, q.quality, q.maxWidth, q.fps)
-      addLog('Sessiya boshlandi — xodim ekranida ogohlantirish banneri ko‘rsatildi')
-      canvasRef.current?.focus()
+      addLog(control ? 'Boshqaruv sessiyasi boshlandi — xodim ekranida ogohlantirish ko‘rsatildi' : 'Jonli kuzatuv boshlandi — xodim ekranida ogohlantirish ko‘rsatildi')
+      if (control) canvasRef.current?.focus()
     } catch (e) {
       setStatus('error')
       setMessage((e as Error).message.replace(/^.*HubException: /, ''))
@@ -139,7 +141,7 @@ export function RemotePage() {
   const send = (type: string, e: MouseEvent<HTMLCanvasElement> | WheelEvent<HTMLCanvasElement> | null, extra: Partial<{ button: number; delta: number; keyCode: number }> = {}) => {
     const sid = sessionRef.current
     const c = canvasRef.current
-    if (!sid || !c || connRef.current?.state !== HubConnectionState.Connected) return
+    if (!controlEnabled || !sid || !c || connRef.current?.state !== HubConnectionState.Connected) return
     let x = 0
     let y = 0
     if (e) {
@@ -189,13 +191,24 @@ export function RemotePage() {
               <option value="high">Yuqori</option>
             </Select>
             {live ? (
-              <Button variant="danger" onClick={stop}>
-                <Square className="size-4" /> To‘xtatish
-              </Button>
+              <>
+                <Button variant={controlEnabled ? 'primary' : 'secondary'} onClick={() => setControlEnabled((v) => !v)} title="Sichqoncha va klaviatura boshqaruvini yoqish/o‘chirish">
+                  {controlEnabled ? <MousePointerClick className="size-4" /> : <Eye className="size-4" />}
+                  {controlEnabled ? 'Boshqaruv yoqilgan' : 'Faqat kuzatuv'}
+                </Button>
+                <Button variant="danger" onClick={stop}>
+                  <Square className="size-4" /> To‘xtatish
+                </Button>
+              </>
             ) : (
-              <Button onClick={start} disabled={status === 'connecting' || status === 'error'}>
-                <Play className="size-4" /> Boshqaruvni boshlash
-              </Button>
+              <>
+                <Button onClick={() => start(false)} disabled={status === 'connecting' || status === 'error'}>
+                  <Eye className="size-4" /> Jonli ko‘rish
+                </Button>
+                <Button variant="secondary" onClick={() => start(true)} disabled={status === 'connecting' || status === 'error'}>
+                  <MousePointerClick className="size-4" /> Boshqaruvni boshlash
+                </Button>
+              </>
             )}
             <Button variant="secondary" title="To‘liq ekran" onClick={() => canvasRef.current?.requestFullscreen()}>
               <Maximize className="size-4" />
@@ -232,7 +245,7 @@ export function RemotePage() {
           <canvas
             ref={canvasRef}
             tabIndex={0}
-            className="block aspect-video w-full cursor-crosshair bg-ink-950 object-contain outline-none focus:ring-2 focus:ring-brand-500"
+            className={`block aspect-video w-full bg-ink-950 object-contain outline-none focus:ring-2 focus:ring-brand-500 ${controlEnabled ? 'cursor-crosshair' : 'cursor-default'}`}
             onMouseMove={onMove}
             onMouseDown={(e) => send('down', e, { button: e.button })}
             onMouseUp={(e) => send('up', e, { button: e.button })}
@@ -243,8 +256,8 @@ export function RemotePage() {
           />
           {!live && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center text-sm text-slate-400">
-              <p>{status === 'error' ? message : status === 'ended' ? `Sessiya tugadi: ${message}` : 'Boshqaruvni boshlash tugmasini bosing'}</p>
-              <p className="text-xs text-slate-500">Klaviatura uchun ekran ustiga bir marta bosing. Ctrl+Alt+Del va UAC oynalari Windows himoyasi tufayli uzatilmaydi.</p>
+              <p>{status === 'error' ? message : status === 'ended' ? `Sessiya tugadi: ${message}` : '“Jonli ko‘rish” tugmasini bosing — bu kompyuterda nima qilinayotgani shu yerda ko‘rinadi'}</p>
+              <p className="text-xs text-slate-500">Boshqaruv uchun “Boshqaruvni boshlash”ni tanlang. Klaviatura uchun ekran ustiga bosing. Ctrl+Alt+Del va UAC oynalari Windows himoyasi tufayli uzatilmaydi.</p>
             </div>
           )}
         </div>
