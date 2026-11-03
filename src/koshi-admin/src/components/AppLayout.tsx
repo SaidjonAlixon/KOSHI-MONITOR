@@ -117,21 +117,19 @@ export function AppLayout() {
 
   const sidebarBody = (isCollapsed: boolean) => (
     <>
-      <div className="flex h-20 shrink-0 items-center px-3">
-        <div className={`flex items-center justify-center rounded-xl bg-white shadow-sm ${isCollapsed ? 'px-2 py-2' : 'w-full px-4 py-2.5'}`}>
-          {isCollapsed ? <KoshiIcon className="size-11" /> : <KoshiLogo className="h-9 max-w-full" />}
-        </div>
+      <div className="flex h-16 shrink-0 items-center border-b border-slate-200 px-4 dark:border-white/5">
+        {isCollapsed ? <KoshiIcon className="size-9" /> : <KoshiLogo className="h-7" />}
       </div>
       <SidebarNav collapsed={isCollapsed} onNavigate={() => setMobileOpen(false)} />
     </>
   )
 
   return (
-    <div className="flex h-full">
-      <aside className={`hidden shrink-0 flex-col border-r border-white/5 bg-gradient-to-b from-ink-900 to-ink-950 transition-[width] md:flex ${collapsed ? 'w-20' : 'w-64'}`}>
+    <div className="flex h-full bg-slate-100 dark:bg-ink-950">
+      <aside className={`hidden shrink-0 flex-col border-r border-slate-200 bg-white transition-[width] md:flex dark:border-white/5 dark:bg-ink-900 ${collapsed ? 'w-20' : 'w-64'}`}>
         {sidebarBody(collapsed)}
-        <div className="border-t border-white/5 p-3">
-          <button onClick={() => setCollapsed((c) => !c)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-xs text-slate-500 hover:bg-white/5 hover:text-slate-300">
+        <div className="border-t border-slate-200 p-3 dark:border-white/5">
+          <button onClick={() => setCollapsed((c) => !c)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-xs text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/5 dark:hover:text-slate-300">
             <PanelLeftClose className={`size-4 transition ${collapsed ? 'rotate-180' : ''}`} />
             {!collapsed && 'Menyuni yig‘ish'}
           </button>
@@ -140,8 +138,8 @@ export function AppLayout() {
 
       {mobileOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
-          <div className="absolute inset-0 bg-ink-950/70" onClick={() => setMobileOpen(false)} />
-          <aside className="relative flex h-full w-72 flex-col bg-gradient-to-b from-ink-900 to-ink-950">
+          <div className="absolute inset-0 bg-ink-950/50" onClick={() => setMobileOpen(false)} />
+          <aside className="relative flex h-full w-72 flex-col bg-white dark:bg-ink-900">
             <button onClick={() => setMobileOpen(false)} className="absolute right-3 top-4 rounded-lg p-1 text-slate-400" aria-label="Menyuni yopish">
               <X className="size-5" />
             </button>
