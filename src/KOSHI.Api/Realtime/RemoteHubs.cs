@@ -119,6 +119,14 @@ public sealed class AgentHub(RemoteRegistry registry, IHubContext<RemoteHub> adm
     public async Task ChatTyping() =>
         await monitoring.Clients.All.SendAsync("supportTyping", DeviceId);
 
+    public async Task ChatMarkRead()
+    {
+        using var scope = scopes.CreateScope();
+        var support = scope.ServiceProvider.GetRequiredService<SupportService>();
+        if (await support.MarkReadByDeviceAsync(DeviceId))
+            await monitoring.Clients.All.SendAsync("supportMessagesRead", DeviceId);
+    }
+
     public static string Group(Guid deviceId) => $"device:{deviceId:N}";
 
     private async Task AuditAsync(RemoteSession s, string action, object details)

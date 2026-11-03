@@ -1,6 +1,6 @@
 import { HubConnectionBuilder, LogLevel } from '@microsoft/signalr'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ExternalLink, MessageSquare, Monitor, Send } from 'lucide-react'
+import { Check, CheckCheck, ExternalLink, MessageSquare, Monitor, Pencil, Send, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router'
 import { Input, PageHeader } from '@/components/forms'
@@ -15,6 +15,7 @@ export function SupportPage() {
   const isPopup = params.get('popup') === '1'
   const [selectedId, setSelectedId] = useState<string>(initialDevice)
   const [text, setText] = useState('')
+  const [editingMsg, setEditingMsg] = useState<SupportMessage | null>(null)
   const [typingDevices, setTypingDevices] = useState<Record<string, number>>({})
   const endRef = useRef<HTMLDivElement>(null)
   const lastTypingSentRef = useRef<number>(0)
@@ -44,7 +45,7 @@ export function SupportPage() {
     refetchInterval: 6000,
   })
 
-  // Real-time SignalR subscription for instant messages and typing indicators
+  // Real-time SignalR subscription for instant messages, edits, deletes, read receipts, and typing indicators
   useEffect(() => {
     const conn = new HubConnectionBuilder()
       .withUrl('/hubs/monitoring', { accessTokenFactory: () => getAccessToken() ?? '' })
@@ -65,6 +66,33 @@ export function SupportPage() {
         return [...old, msg]
       })
       void qc.invalidateQueries({ queryKey: ['support-threads'] })
+    })
+
+    conn.on('supportMessageUpdated', (msg: SupportMessage) => {
+      qc.setQueryData<SupportMessage[]>(['support-messages', msg.deviceId], (old) =>
+        old ? old.map((x) => (x.id === msg.id ? msg : x)) : [msg]
+      )
+      void qc.invalidateQueries({ queryKey: ['support-threads'] })
+    })
+
+    conn.on('supportMessageDeleted', (ev: { deviceId: string; messageId: string }) => {
+      qc.setQueryData<SupportMessage[]>(['support-messages', ev.deviceId], (old) =>
+        old ? old.filter((x) => x.id !== ev.messageId) : []
+      )
+      void qc.invalidateQueries({ queryKey: ['support-threads'] })
+    })
+
+    conn.on('supportCleared', (deviceId: string) => {
+      qc.setQueryData<SupportMessage[]>(['support-messages', String(deviceId)], () => [])
+      void qc.invalidateQueries({ queryKey: ['support-threads'] })
+    })
+
+    conn.on('supportMessagesRead', (deviceId: string) => {
+      const id = String(deviceId)
+      const nowIso = new Date().toISOString()
+      qc.setQueryData<SupportMessage[]>(['support-messages', id], (old) =>
+        old ? old.map((x) => (x.sender === 'Admin' && !x.readAt ? { ...x, readAt: nowIso } : x)) : []
+      )
     })
 
     conn.on('supportTyping', (deviceId: string) => {
@@ -108,6 +136,43 @@ export function SupportPage() {
     },
   })
 
+  const editMutation = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: string }) =>
+      api<SupportMessage>(`/api/support/messages/${id}`, { method: 'PUT', body: { text: body } }),
+    onSuccess: (msg) => {
+      setEditingMsg(null)
+      setText('')
+      qc.setQueryData<SupportMessage[]>(['support-messages', msg.deviceId], (old) =>
+        old ? old.map((x) => (x.id === msg.id ? msg : x)) : [msg]
+      )
+      void qc.invalidateQueries({ queryKey: ['support-threads'] })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api(`/api/support/messages/${id}`, { method: 'DELETE' }),
+    onSuccess: (_res, id) => {
+      if (editingMsg?.id === id) {
+        setEditingMsg(null)
+        setText('')
+      }
+      qc.setQueryData<SupportMessage[]>(['support-messages', selectedId], (old) =>
+        old ? old.filter((x) => x.id !== id) : []
+      )
+      void qc.invalidateQueries({ queryKey: ['support-threads'] })
+    },
+  })
+
+  const clearMutation = useMutation({
+    mutationFn: (devId: string) => api(`/api/support/${devId}/clear`, { method: 'DELETE' }),
+    onSuccess: (_res, devId) => {
+      setEditingMsg(null)
+      setText('')
+      qc.setQueryData<SupportMessage[]>(['support-messages', devId], () => [])
+      void qc.invalidateQueries({ queryKey: ['support-threads'] })
+    },
+  })
+
   const notifyAdminTyping = () => {
     if (!selectedId) return
     const now = Date.now()
@@ -120,8 +185,22 @@ export function SupportPage() {
     e.preventDefault()
     const trimmed = text.trim()
     if (!trimmed || !selectedId) return
+    if (editingMsg) {
+      editMutation.mutate({ id: editingMsg.id, body: trimmed })
+    } else {
+      setText('')
+      send.mutate(trimmed)
+    }
+  }
+
+  const startEdit = (m: SupportMessage) => {
+    setEditingMsg(m)
+    setText(m.text)
+  }
+
+  const cancelEdit = () => {
+    setEditingMsg(null)
     setText('')
-    send.mutate(trimmed)
   }
 
   const openPopup = () => {
@@ -181,7 +260,10 @@ export function SupportPage() {
                     <button
                       key={t.deviceId}
                       type="button"
-                      onClick={() => setSelectedId(t.deviceId)}
+                      onClick={() => {
+                        setSelectedId(t.deviceId)
+                        cancelEdit()
+                      }}
                       className={`flex w-full items-start gap-3 px-4 py-3 text-left transition ${
                         active ? 'bg-brand-50/80 dark:bg-brand-500/10' : 'hover:bg-slate-50 dark:hover:bg-white/5'
                       }`}
@@ -230,11 +312,22 @@ export function SupportPage() {
                     </p>
                   </div>
                 </div>
-                {!isPopup && (
-                  <Button variant="secondary" onClick={openPopup} title="Chatni alohida oynada ochish">
-                    <ExternalLink className="size-4" /> Alohida oynada ochish
-                  </Button>
-                )}
+                <div className="flex items-center gap-2">
+                  {(messages.data ?? []).length > 0 && (
+                    <Button
+                      variant="ghost"
+                      onClick={() => confirm('Ushbu qurilma bilan barcha xabarlar o‘chirilsinmi?') && clearMutation.mutate(selectedId)}
+                      title="Barcha xabarlarni o‘chirish"
+                    >
+                      <Trash2 className="size-4 text-rose-500" /> Tozalash
+                    </Button>
+                  )}
+                  {!isPopup && (
+                    <Button variant="secondary" onClick={openPopup} title="Chatni alohida oynada ochish">
+                      <ExternalLink className="size-4" /> Alohida oynada ochish
+                    </Button>
+                  )}
+                </div>
               </div>
 
               <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50/60 p-5 dark:bg-ink-950/40">
@@ -247,8 +340,30 @@ export function SupportPage() {
                 ) : (
                   messages.data?.map((m) => {
                     const isAdmin = m.sender === 'Admin'
+                    const isRead = Boolean(m.readAt)
                     return (
-                      <div key={m.id} className={`flex ${isAdmin ? 'justify-end' : 'justify-start'}`}>
+                      <div key={m.id} className={`group flex items-center gap-2 ${isAdmin ? 'justify-end' : 'justify-start'}`}>
+                        {isAdmin && (
+                          <div className="flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
+                            <button
+                              type="button"
+                              onClick={() => startEdit(m)}
+                              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200/70 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-white"
+                              title="Xabarni tahrirlash"
+                            >
+                              <Pencil className="size-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => confirm('Bu xabar o‘chirilsinmi?') && deleteMutation.mutate(m.id)}
+                              className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10"
+                              title="Xabarni o‘chirish"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          </div>
+                        )}
+
                         <div
                           className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm shadow-xs ${
                             isAdmin
@@ -258,8 +373,28 @@ export function SupportPage() {
                         >
                           {isAdmin && m.senderName && <p className="mb-0.5 text-[11px] font-semibold text-brand-100">{m.senderName}</p>}
                           <p className="whitespace-pre-wrap break-words">{m.text}</p>
-                          <p className={`mt-1 text-right text-[10px] ${isAdmin ? 'text-brand-200' : 'text-slate-400'}`}>{formatDateTime(m.createdAt)}</p>
+                          <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${isAdmin ? 'text-brand-200' : 'text-slate-400'}`}>
+                            <span>{formatDateTime(m.createdAt)}</span>
+                            {isAdmin && (
+                              <span title={isRead ? 'O‘qildi' : 'Yuborildi'}>
+                                {isRead ? <CheckCheck className="size-3.5 text-white" /> : <Check className="size-3.5 text-brand-200" />}
+                              </span>
+                            )}
+                          </div>
                         </div>
+
+                        {!isAdmin && (
+                          <div className="flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
+                            <button
+                              type="button"
+                              onClick={() => confirm('Bu xabar o‘chirilsinmi?') && deleteMutation.mutate(m.id)}
+                              className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10"
+                              title="Xabarni o‘chirish"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )
                   })
@@ -274,6 +409,17 @@ export function SupportPage() {
                 <div ref={endRef} />
               </div>
 
+              {editingMsg && (
+                <div className="flex items-center justify-between border-t border-brand-200 bg-brand-50/70 px-4 py-2 text-xs text-brand-800 dark:border-brand-500/20 dark:bg-brand-500/10 dark:text-brand-200">
+                  <span className="truncate">
+                    <strong>Tahrirlanmoqda:</strong> {editingMsg.text}
+                  </span>
+                  <button type="button" onClick={cancelEdit} className="ml-2 rounded p-1 hover:bg-brand-100 dark:hover:bg-white/10" title="Bekor qilish">
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+              )}
+
               <form onSubmit={onSubmit} className="flex items-center gap-2 border-t border-slate-100 p-3 dark:border-white/5">
                 <Input
                   value={text}
@@ -281,12 +427,12 @@ export function SupportPage() {
                     setText(e.target.value)
                     if (e.target.value.trim()) notifyAdminTyping()
                   }}
-                  placeholder="Xabaringizni yozing…"
+                  placeholder={editingMsg ? 'Yangi matnni kiriting…' : 'Xabaringizni yozing…'}
                   maxLength={2000}
                   className="flex-1"
                 />
-                <Button type="submit" loading={send.isPending} disabled={!text.trim()}>
-                  <Send className="size-4" /> Yuborish
+                <Button type="submit" loading={send.isPending || editMutation.isPending} disabled={!text.trim()}>
+                  <Send className="size-4" /> {editingMsg ? 'Saqlash' : 'Yuborish'}
                 </Button>
               </form>
             </>

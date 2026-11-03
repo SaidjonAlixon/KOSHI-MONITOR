@@ -30,6 +30,10 @@ public sealed class RemoteConnection : IAsyncDisposable
     private Guid? _sessionId;
 
     public event Action<SupportMessageDto>? ChatMessageReceived;
+    public event Action<SupportMessageDto>? ChatMessageUpdated;
+    public event Action<Guid>? ChatMessageDeleted;
+    public event Action<Guid[]>? ChatMessagesRead;
+    public event Action? ChatCleared;
     public event Action<string>? ChatTypingReceived;
 
     public RemoteConnection(Uri server, string credential, IRemoteHost host, ILogger logger)
@@ -55,6 +59,10 @@ public sealed class RemoteConnection : IAsyncDisposable
             await SafeInvoke("CommandResult", cmd.CommandId, ok, message);
         });
         _hub.On<SupportMessageDto>("chatMessage", msg => ChatMessageReceived?.Invoke(msg));
+        _hub.On<SupportMessageDto>("chatMessageUpdated", msg => ChatMessageUpdated?.Invoke(msg));
+        _hub.On<Guid>("chatMessageDeleted", id => ChatMessageDeleted?.Invoke(id));
+        _hub.On<Guid[]>("chatMessagesRead", ids => ChatMessagesRead?.Invoke(ids));
+        _hub.On("chatCleared", () => ChatCleared?.Invoke());
         _hub.On<string>("chatTyping", name => ChatTypingReceived?.Invoke(name));
         _hub.Closed += _ =>
         {
@@ -66,6 +74,7 @@ public sealed class RemoteConnection : IAsyncDisposable
     public HubConnectionState State => _hub.State;
 
     public Task SendTypingAsync() => SafeInvoke("ChatTyping");
+    public Task SendMarkReadAsync() => SafeInvoke("ChatMarkRead");
 
     public async Task StartAsync(CancellationToken ct)
     {

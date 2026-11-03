@@ -117,7 +117,13 @@ public sealed class SupportController(SupportService support, IHubContext<AgentH
     public async Task<ActionResult<IReadOnlyList<SupportThreadDto>>> Threads(CancellationToken ct) => Ok(await support.ThreadsAsync(ct));
 
     [HttpGet("{deviceId:guid}")]
-    public async Task<ActionResult<IReadOnlyList<SupportMessageDto>>> History(Guid deviceId, CancellationToken ct) => Ok(await support.HistoryForAdminAsync(deviceId, ct));
+    public async Task<ActionResult<IReadOnlyList<SupportMessageDto>>> History(Guid deviceId, CancellationToken ct)
+    {
+        var (messages, readIds) = await support.HistoryForAdminWithReadAsync(deviceId, ct);
+        if (readIds.Count > 0)
+            await agents.Clients.Group(AgentHub.Group(deviceId)).SendAsync("chatMessagesRead", readIds, ct);
+        return Ok(messages);
+    }
 
     [HttpPost("{deviceId:guid}")]
     public async Task<ActionResult<SupportMessageDto>> Send(Guid deviceId, SendSupportMessageRequest request, CancellationToken ct)
@@ -133,6 +139,33 @@ public sealed class SupportController(SupportService support, IHubContext<AgentH
     {
         var name = User.FindFirst("email")?.Value ?? User.Identity?.Name ?? "Administrator";
         await agents.Clients.Group(AgentHub.Group(deviceId)).SendAsync("chatTyping", name, ct);
+        return NoContent();
+    }
+
+    [HttpPut("messages/{messageId:guid}")]
+    public async Task<ActionResult<SupportMessageDto>> EditMessage(Guid messageId, SendSupportMessageRequest request, CancellationToken ct)
+    {
+        var dto = await support.UpdateMessageAsync(messageId, request.Text, ct);
+        await agents.Clients.Group(AgentHub.Group(dto.DeviceId)).SendAsync("chatMessageUpdated", dto, ct);
+        await monitoring.Clients.All.SendAsync("supportMessageUpdated", dto, ct);
+        return Ok(dto);
+    }
+
+    [HttpDelete("messages/{messageId:guid}")]
+    public async Task<IActionResult> DeleteMessage(Guid messageId, CancellationToken ct)
+    {
+        var (deviceId, id) = await support.DeleteMessageAsync(messageId, ct);
+        await agents.Clients.Group(AgentHub.Group(deviceId)).SendAsync("chatMessageDeleted", id, ct);
+        await monitoring.Clients.All.SendAsync("supportMessageDeleted", new { deviceId, messageId = id }, ct);
+        return NoContent();
+    }
+
+    [HttpDelete("{deviceId:guid}/clear")]
+    public async Task<IActionResult> ClearThread(Guid deviceId, CancellationToken ct)
+    {
+        await support.ClearThreadAsync(deviceId, ct);
+        await agents.Clients.Group(AgentHub.Group(deviceId)).SendAsync("chatCleared", ct);
+        await monitoring.Clients.All.SendAsync("supportCleared", deviceId, ct);
         return NoContent();
     }
 }

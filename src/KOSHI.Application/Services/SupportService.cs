@@ -14,6 +14,7 @@ public sealed class SupportService(IKoshiDbContext db, ICurrentUser currentUser,
     public async Task<IReadOnlyList<SupportThreadDto>> ThreadsAsync(CancellationToken ct = default)
     {
         var rows = await db.SupportMessages.AsNoTracking()
+            .Where(m => m.Device != null && m.Device.DeletedAt == null)
             .GroupBy(m => m.DeviceId)
             .Select(g => new
             {
@@ -25,23 +26,23 @@ public sealed class SupportService(IKoshiDbContext db, ICurrentUser currentUser,
 
         var ids = rows.Select(r => r.DeviceId).ToList();
         var devices = await db.Devices.AsNoTracking().Include(d => d.Employee)
-            .Where(d => ids.Contains(d.Id)).ToDictionaryAsync(d => d.Id, ct);
+            .Where(d => ids.Contains(d.Id) && d.DeletedAt == null).ToDictionaryAsync(d => d.Id, ct);
         var previews = await db.SupportMessages.AsNoTracking()
             .Where(m => ids.Contains(m.DeviceId))
             .GroupBy(m => m.DeviceId)
             .Select(g => g.OrderByDescending(x => x.CreatedAt).First())
             .ToDictionaryAsync(m => m.DeviceId, m => m.Text, ct);
 
-        return rows.OrderByDescending(r => r.LastAt).Select(r =>
+        return rows.Where(r => devices.ContainsKey(r.DeviceId)).OrderByDescending(r => r.LastAt).Select(r =>
         {
-            var d = devices.GetValueOrDefault(r.DeviceId);
+            var d = devices[r.DeviceId];
             var preview = previews.GetValueOrDefault(r.DeviceId);
-            return new SupportThreadDto(r.DeviceId, d?.DisplayName ?? "—", d?.Employee?.FullName, r.Unread, r.LastAt,
+            return new SupportThreadDto(r.DeviceId, d.DisplayName, d.Employee?.FullName, r.Unread, r.LastAt,
                 preview is { Length: > 80 } ? preview[..80] + "…" : preview);
         }).ToList();
     }
 
-    public async Task<IReadOnlyList<SupportMessageDto>> HistoryForAdminAsync(Guid deviceId, CancellationToken ct = default)
+    public async Task<(IReadOnlyList<SupportMessageDto> Messages, IReadOnlyList<Guid> MarkedReadIds)> HistoryForAdminWithReadAsync(Guid deviceId, CancellationToken ct = default)
     {
         if (!await db.Devices.AnyAsync(d => d.Id == deviceId && d.DeletedAt == null, ct)) throw Errors.NotFound("Device");
         var msgs = await db.SupportMessages.Where(m => m.DeviceId == deviceId).OrderBy(m => m.CreatedAt).Take(500).ToListAsync(ct);
@@ -49,7 +50,20 @@ public sealed class SupportService(IKoshiDbContext db, ICurrentUser currentUser,
         var unread = msgs.Where(m => m.Sender == SupportSender.Device && m.ReadAt == null).ToList();
         foreach (var m in unread) m.ReadAt = now;
         if (unread.Count > 0) await db.SaveChangesAsync(ct);
-        return msgs.Select(ToDto).ToList();
+        return (msgs.Select(ToDto).ToList(), unread.Select(x => x.Id).ToList());
+    }
+
+    public async Task<IReadOnlyList<SupportMessageDto>> HistoryForAdminAsync(Guid deviceId, CancellationToken ct = default) =>
+        (await HistoryForAdminWithReadAsync(deviceId, ct)).Messages;
+
+    public async Task<bool> MarkReadByDeviceAsync(Guid deviceId, CancellationToken ct = default)
+    {
+        var now = clock.GetUtcNow().UtcDateTime;
+        var unread = await db.SupportMessages.Where(m => m.DeviceId == deviceId && m.Sender == SupportSender.Admin && m.ReadAt == null).ToListAsync(ct);
+        if (unread.Count == 0) return false;
+        foreach (var m in unread) m.ReadAt = now;
+        await db.SaveChangesAsync(ct);
+        return true;
     }
 
     public async Task<SupportMessageDto> SendFromAdminAsync(Guid deviceId, string text, CancellationToken ct = default)
@@ -65,6 +79,34 @@ public sealed class SupportService(IKoshiDbContext db, ICurrentUser currentUser,
         audit.Record("support.reply", "Device", deviceId);
         await db.SaveChangesAsync(ct);
         return ToDto(msg);
+    }
+
+    public async Task<SupportMessageDto> UpdateMessageAsync(Guid messageId, string text, CancellationToken ct = default)
+    {
+        var msg = await db.SupportMessages.FirstOrDefaultAsync(m => m.Id == messageId, ct) ?? throw Errors.NotFound("SupportMessage");
+        msg.Text = Trim(text);
+        audit.Record("support.edit_message", "SupportMessage", messageId, new { msg.DeviceId });
+        await db.SaveChangesAsync(ct);
+        return ToDto(msg);
+    }
+
+    public async Task<(Guid DeviceId, Guid MessageId)> DeleteMessageAsync(Guid messageId, CancellationToken ct = default)
+    {
+        var msg = await db.SupportMessages.FirstOrDefaultAsync(m => m.Id == messageId, ct) ?? throw Errors.NotFound("SupportMessage");
+        var deviceId = msg.DeviceId;
+        db.SupportMessages.Remove(msg);
+        audit.Record("support.delete_message", "SupportMessage", messageId, new { deviceId });
+        await db.SaveChangesAsync(ct);
+        return (deviceId, messageId);
+    }
+
+    public async Task ClearThreadAsync(Guid deviceId, CancellationToken ct = default)
+    {
+        var msgs = await db.SupportMessages.Where(m => m.DeviceId == deviceId).ToListAsync(ct);
+        if (msgs.Count == 0) return;
+        db.SupportMessages.RemoveRange(msgs);
+        audit.Record("support.clear_thread", "Device", deviceId, new { count = msgs.Count });
+        await db.SaveChangesAsync(ct);
     }
 
     // ---------- Agent side ----------

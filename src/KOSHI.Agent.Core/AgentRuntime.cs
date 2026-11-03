@@ -31,7 +31,7 @@ public static class AppLock
         KOSHI.Contracts.AppLockPassword.Verify(rule.PasswordSalt, rule.PasswordHash, typedPassword);
 }
 
-public sealed record ChatMessage(Guid Id, bool FromAdmin, string? SenderName, string Text, DateTime CreatedAt);
+public sealed record ChatMessage(Guid Id, bool FromAdmin, string? SenderName, string Text, DateTime CreatedAt, bool IsRead = false);
 
 public sealed record AgentStatus(
     AgentState State,
@@ -101,6 +101,10 @@ public sealed class AgentRuntime : IAsyncDisposable
 
     /// <summary>Raised for each support chat message (from admin, and echoes of the agent's own sent messages).</summary>
     public event Action<ChatMessage>? ChatReceived;
+    public event Action<ChatMessage>? ChatUpdated;
+    public event Action<Guid>? ChatDeleted;
+    public event Action<IReadOnlyList<Guid>>? ChatRead;
+    public event Action? ChatCleared;
 
     /// <summary>Raised when an administrator is typing a message to this device.</summary>
     public event Action<string>? AdminTyping;
@@ -138,6 +142,12 @@ public sealed class AgentRuntime : IAsyncDisposable
             _ = _api.SendSupportTypingAsync(CancellationToken.None);
     }
 
+    public void MarkAdminMessagesRead()
+    {
+        if (_remote?.State == Microsoft.AspNetCore.SignalR.Client.HubConnectionState.Connected)
+            _ = _remote.SendMarkReadAsync();
+    }
+
     private void EmitChat(ChatMessage msg)
     {
         lock (_gate)
@@ -173,8 +183,50 @@ public sealed class AgentRuntime : IAsyncDisposable
             _remote.ChatMessageReceived += m =>
             {
                 var fromAdmin = string.Equals(m.Sender, "Admin", StringComparison.OrdinalIgnoreCase);
-                EmitChat(new ChatMessage(m.Id, fromAdmin, m.SenderName, m.Text, m.CreatedAt));
+                EmitChat(new ChatMessage(m.Id, fromAdmin, m.SenderName, m.Text, m.CreatedAt, m.ReadAt != null));
                 if (m.CreatedAt > (_chatSince ?? DateTime.MinValue)) _chatSince = m.CreatedAt;
+            };
+            _remote.ChatMessageUpdated += m =>
+            {
+                var fromAdmin = string.Equals(m.Sender, "Admin", StringComparison.OrdinalIgnoreCase);
+                var updated = new ChatMessage(m.Id, fromAdmin, m.SenderName, m.Text, m.CreatedAt, m.ReadAt != null);
+                lock (_gate)
+                {
+                    var idx = _chatHistory.FindIndex(x => x.Id == m.Id);
+                    if (idx >= 0) _chatHistory[idx] = updated;
+                }
+                ChatUpdated?.Invoke(updated);
+            };
+            _remote.ChatMessageDeleted += id =>
+            {
+                lock (_gate)
+                {
+                    _seenMessages.Remove(id);
+                    _chatHistory.RemoveAll(x => x.Id == id);
+                }
+                ChatDeleted?.Invoke(id);
+            };
+            _remote.ChatMessagesRead += ids =>
+            {
+                lock (_gate)
+                {
+                    var set = ids.ToHashSet();
+                    for (var i = 0; i < _chatHistory.Count; i++)
+                    {
+                        if (set.Contains(_chatHistory[i].Id))
+                            _chatHistory[i] = _chatHistory[i] with { IsRead = true };
+                    }
+                }
+                ChatRead?.Invoke(ids);
+            };
+            _remote.ChatCleared += () =>
+            {
+                lock (_gate)
+                {
+                    _seenMessages.Clear();
+                    _chatHistory.Clear();
+                }
+                ChatCleared?.Invoke();
             };
             _remote.ChatTypingReceived += name => AdminTyping?.Invoke(name);
             _ = _remote.StartAsync(ct);
@@ -496,12 +548,15 @@ public sealed class AgentRuntime : IAsyncDisposable
         try
         {
             var poll = await _api.PollSupportAsync(_chatSince, ct);
+            var newlyRead = new List<Guid>();
             foreach (var m in poll.Messages)
             {
                 var fromAdmin = string.Equals(m.Sender, "Admin", StringComparison.OrdinalIgnoreCase);
-                EmitChat(new ChatMessage(m.Id, fromAdmin, m.SenderName, m.Text, m.CreatedAt));
+                EmitChat(new ChatMessage(m.Id, fromAdmin, m.SenderName, m.Text, m.CreatedAt, m.ReadAt != null));
+                if (!fromAdmin && m.ReadAt != null) newlyRead.Add(m.Id);
                 if (m.CreatedAt > (_chatSince ?? DateTime.MinValue)) _chatSince = m.CreatedAt;
             }
+            if (newlyRead.Count > 0) ChatRead?.Invoke(newlyRead);
         }
         catch (Exception ex) when (ex is not DeviceRejectedException)
         {

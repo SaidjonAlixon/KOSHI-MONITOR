@@ -85,10 +85,33 @@ public partial class App : System.Windows.Application
         {
             _window?.AddChatMessage(m);
             _chatWindow?.AddChatMessage(m);
-            if (m.FromAdmin && _chatWindow is { IsVisible: false } && _window is { IsVisible: false })
+            if (m.FromAdmin)
             {
-                _tray?.ShowBalloonTip(4000, "Administrator xabari", m.Text.Length > 100 ? m.Text[..100] + "…" : m.Text, Forms.ToolTipIcon.Info);
+                if (_chatWindow is { IsVisible: true } || _window is { IsVisible: true })
+                    _runtime?.MarkAdminMessagesRead();
+                else
+                    _tray?.ShowBalloonTip(4000, "Administrator xabari", m.Text.Length > 100 ? m.Text[..100] + "…" : m.Text, Forms.ToolTipIcon.Info);
             }
+        });
+        _runtime.ChatUpdated += m => Dispatcher.BeginInvoke(() =>
+        {
+            _window?.UpdateChatMessage(m);
+            _chatWindow?.UpdateChatMessage(m);
+        });
+        _runtime.ChatDeleted += id => Dispatcher.BeginInvoke(() =>
+        {
+            _window?.DeleteChatMessage(id);
+            _chatWindow?.DeleteChatMessage(id);
+        });
+        _runtime.ChatRead += ids => Dispatcher.BeginInvoke(() =>
+        {
+            _window?.MarkMessagesRead(ids);
+            _chatWindow?.MarkMessagesRead(ids);
+        });
+        _runtime.ChatCleared += () => Dispatcher.BeginInvoke(() =>
+        {
+            _window?.ClearChatMessages();
+            _chatWindow?.ClearChatMessages();
         });
         _runtime.AdminTyping += name => Dispatcher.BeginInvoke(() =>
         {
@@ -107,9 +130,11 @@ public partial class App : System.Windows.Application
         _window.OpenChatWindowRequested = ShowChatWindow;
         _window.ShowUpdatePromptRequested = ShowUpdatePrompt;
         _window.CheckUpdateRequested = () => _runtime!.CheckForUpdateNowAsync();
+        _window.WindowActivatedForRead = () => _runtime!.MarkAdminMessagesRead();
 
         _chatWindow.ChatSendRequested = text => _runtime!.SendChatAsync(text);
         _chatWindow.TypingTriggered = () => _runtime!.NotifyTyping();
+        _chatWindow.WindowActivatedForRead = () => _runtime!.MarkAdminMessagesRead();
 
         Render(_runtime.Status);
         _runtime.Start();

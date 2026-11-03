@@ -4,7 +4,7 @@
         Title="KOSHI Agent"
         Icon="pack://application:,,,/Assets/koshi.ico"
         Width="480" SizeToContent="Height"
-        ResizeMode="NoResize"
+        ResizeMode="CanMinimize"
         WindowStartupLocation="CenterScreen"
         Background="White"
         FontFamily="Segoe UI">

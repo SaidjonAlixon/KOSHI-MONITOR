@@ -36,8 +36,14 @@ public sealed class AgentController(DeviceService devices, TelemetryService tele
     }
 
     [HttpGet("api/agent/support")]
-    public async Task<ActionResult<AgentSupportPollDto>> SupportPoll([FromServices] SupportService support, [FromQuery] DateTime? since, CancellationToken ct) =>
-        Ok(await support.PollForDeviceAsync(User.DeviceId(), since, ct));
+    public async Task<ActionResult<AgentSupportPollDto>> SupportPoll([FromServices] SupportService support, [FromServices] IHubContext<MonitoringHub> monitoring, [FromQuery] DateTime? since, CancellationToken ct)
+    {
+        var deviceId = User.DeviceId();
+        var res = await support.PollForDeviceAsync(deviceId, since, ct);
+        if (res.Messages.Any(m => m.Sender == "Admin"))
+            await monitoring.Clients.All.SendAsync("supportMessagesRead", deviceId, ct);
+        return Ok(res);
+    }
 
     [HttpPost("api/agent/support")]
     public async Task<ActionResult<SupportMessageDto>> SupportSend([FromServices] SupportService support, [FromServices] IHubContext<MonitoringHub> monitoring, SendSupportMessageRequest request, CancellationToken ct)

@@ -14,11 +14,12 @@ namespace KOSHI.Agent;
 
 public partial class ChatWindow : Window
 {
-    private readonly HashSet<Guid> _renderedIds = [];
+    private readonly Dictionary<Guid, (Border Bubble, TextBlock Body, TextBlock Meta, DateTime CreatedAt, bool FromAdmin)> _items = [];
     private readonly DispatcherTimer _typingTimer;
 
     public Func<string, Task<bool>>? ChatSendRequested { get; set; }
     public Action? TypingTriggered { get; set; }
+    public Action? WindowActivatedForRead { get; set; }
 
     public ChatWindow()
     {
@@ -30,6 +31,7 @@ public partial class ChatWindow : Window
             TypingText.Visibility = Visibility.Collapsed;
         };
         Loaded += (_, _) => ChatInput.Focus();
+        Activated += (_, _) => WindowActivatedForRead?.Invoke();
     }
 
     public void LoadHistory(IEnumerable<ChatMessage> messages)
@@ -39,7 +41,11 @@ public partial class ChatWindow : Window
 
     public void AddChatMessage(ChatMessage m)
     {
-        if (!_renderedIds.Add(m.Id)) return;
+        if (_items.ContainsKey(m.Id))
+        {
+            UpdateChatMessage(m);
+            return;
+        }
         if (m.FromAdmin)
         {
             _typingTimer.Stop();
@@ -58,11 +64,56 @@ public partial class ChatWindow : Window
         var panel = new StackPanel();
         if (m.FromAdmin && !string.IsNullOrWhiteSpace(m.SenderName))
             panel.Children.Add(new TextBlock { Text = m.SenderName, FontSize = 10.5, FontWeight = FontWeights.SemiBold, Foreground = Brush("#4338CA"), Margin = new Thickness(0, 0, 0, 2) });
-        panel.Children.Add(new TextBlock { Text = m.Text, TextWrapping = TextWrapping.Wrap, FontSize = 13, Foreground = Brush(m.FromAdmin ? "#0B1226" : "#FFFFFF") });
-        panel.Children.Add(new TextBlock { Text = m.CreatedAt.ToLocalTime().ToString("HH:mm"), FontSize = 9.5, Foreground = Brush(m.FromAdmin ? "#64748B" : "#C7D2FE"), HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 2, 0, 0) });
+
+        var body = new TextBlock { Text = m.Text, TextWrapping = TextWrapping.Wrap, FontSize = 13, Foreground = Brush(m.FromAdmin ? "#0B1226" : "#FFFFFF") };
+        var meta = new TextBlock
+        {
+            Text = FormatMeta(m.CreatedAt, m.FromAdmin, m.IsRead),
+            FontSize = 9.5,
+            Foreground = Brush(m.FromAdmin ? "#64748B" : "#C7D2FE"),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 2, 0, 0),
+        };
+        panel.Children.Add(body);
+        panel.Children.Add(meta);
         bubble.Child = panel;
         ChatList.Children.Add(bubble);
+        _items[m.Id] = (bubble, body, meta, m.CreatedAt, m.FromAdmin);
         ChatScroll.ScrollToEnd();
+    }
+
+    public void UpdateChatMessage(ChatMessage m)
+    {
+        if (!_items.TryGetValue(m.Id, out var entry)) return;
+        entry.Body.Text = m.Text;
+        entry.Meta.Text = FormatMeta(entry.CreatedAt, entry.FromAdmin, m.IsRead);
+    }
+
+    public void DeleteChatMessage(Guid id)
+    {
+        if (!_items.Remove(id, out var entry)) return;
+        ChatList.Children.Remove(entry.Bubble);
+    }
+
+    public void MarkMessagesRead(IEnumerable<Guid> ids)
+    {
+        foreach (var id in ids)
+        {
+            if (_items.TryGetValue(id, out var entry) && !entry.FromAdmin)
+                entry.Meta.Text = FormatMeta(entry.CreatedAt, false, true);
+        }
+    }
+
+    public void ClearChatMessages()
+    {
+        _items.Clear();
+        ChatList.Children.Clear();
+    }
+
+    private static string FormatMeta(DateTime createdAt, bool fromAdmin, bool isRead)
+    {
+        var time = createdAt.ToLocalTime().ToString("HH:mm");
+        return fromAdmin ? time : $"{time} {(isRead ? "✓✓" : "✓")}";
     }
 
     public void ShowAdminTyping(string? senderName)
