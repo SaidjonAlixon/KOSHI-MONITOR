@@ -1,26 +1,32 @@
 <Window x:Class="KOSHI.Agent.Remote.RemoteBanner"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="KOSHI — masofaviy boshqaruv"
+        Title="KOSHI"
         WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent"
         Topmost="True" ShowInTaskbar="False" ShowActivated="False"
         SizeToContent="WidthAndHeight" FontFamily="Segoe UI">
-    <Border CornerRadius="0,0,14,14" Padding="18,10" Background="#E11D48" BorderBrush="#FDA4AF" BorderThickness="1,0,1,1">
+    <Border x:Name="Pill" CornerRadius="16" Padding="12,7" Background="#D11D2A3A" BorderBrush="#5592A7C8" BorderThickness="1"
+            ToolTip="Administrator bu kompyuterni masofadan ko'rmoqda. Yopish uchun bosing.">
+        <Border.Effect>
+            <DropShadowEffect Color="#000000" BlurRadius="12" ShadowDepth="2" Opacity="0.4" />
+        </Border.Effect>
         <StackPanel Orientation="Horizontal">
-            <Ellipse Width="10" Height="10" Fill="White" VerticalAlignment="Center">
+            <Ellipse Width="9" Height="9" Fill="#F43F5E" VerticalAlignment="Center">
                 <Ellipse.Triggers>
                     <EventTrigger RoutedEvent="Loaded">
                         <BeginStoryboard>
                             <Storyboard RepeatBehavior="Forever" AutoReverse="True">
-                                <DoubleAnimation Storyboard.TargetProperty="Opacity" From="1" To="0.2" Duration="0:0:0.8" />
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity" From="1" To="0.25" Duration="0:0:0.9" />
                             </Storyboard>
                         </BeginStoryboard>
                     </EventTrigger>
                 </Ellipse.Triggers>
             </Ellipse>
-            <TextBlock x:Name="Message" Margin="10,0,16,0" VerticalAlignment="Center" Foreground="White" FontWeight="SemiBold" FontSize="13" />
-            <Button x:Name="EndButton" Content="Sessiyani tugatish" Padding="12,4" Cursor="Hand" Click="OnEnd"
-                    Background="White" Foreground="#9F1239" BorderThickness="0" FontWeight="SemiBold" />
+            <TextBlock x:Name="Message" Margin="8,0,10,0" VerticalAlignment="Center" Foreground="White" FontSize="12"
+                       Text="KOSHI masofaviy kuzatuv" />
+            <Button x:Name="EndButton" Content="&#x2715;" Width="22" Height="22" Padding="0" Cursor="Hand" Click="OnEnd"
+                    Background="#33FFFFFF" Foreground="White" BorderThickness="0" FontSize="11"
+                    ToolTip="Sessiyani tugatish" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" />
         </StackPanel>
     </Border>
 </Window>

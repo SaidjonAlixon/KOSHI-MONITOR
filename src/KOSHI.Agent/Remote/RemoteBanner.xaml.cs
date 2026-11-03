@@ -11,12 +11,13 @@ public partial class RemoteBanner : Window
     {
         InitializeComponent();
         _end = end;
-        Message.Text = $"Administrator {adminName} bu kompyuterni masofadan ko'rmoqda va boshqarmoqda";
+        // Keep it short/discreet; the full admin name is available on hover.
+        ToolTip = $"Administrator {adminName} bu kompyuterni masofadan ko'rmoqda. Yopish uchun ✕ ni bosing.";
         Loaded += (_, _) =>
         {
             var area = SystemParameters.WorkArea;
-            Left = area.Left + (area.Width - ActualWidth) / 2;
-            Top = area.Top;
+            Left = area.Right - ActualWidth - 16;
+            Top = area.Bottom - ActualHeight - 16;
         };
     }
 
