@@ -137,7 +137,10 @@ public sealed record AgentPolicyDto(
     WorkScheduleDto? WorkSchedule,
     IReadOnlyList<AgentApplicationRuleDto> Rules,
     string MonitoringNotice,
-    string SupportContact);
+    string SupportContact,
+    bool ProtectionEnabled = false,
+    string? ProtectionSalt = null,
+    string? ProtectionHash = null);
 
 public sealed record AgentReleaseDto(
     string Version,

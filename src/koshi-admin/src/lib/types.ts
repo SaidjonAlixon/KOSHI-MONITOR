@@ -349,4 +349,6 @@ export interface SystemSettings {
   reportedActivityWeight: number
   minimumCoverage: number
   agentAutoUpdate: boolean
+  agentProtectionEnabled: boolean
+  agentProtectionPassword?: string | null
 }

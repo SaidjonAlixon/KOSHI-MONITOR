@@ -24,6 +24,9 @@ public sealed class SettingsService(IKoshiDbContext db, AuditWriter audit, ICurr
         public const string ReportedActivityWeight = "productivity.reportedActivityWeight";
         public const string MinimumCoverage = "productivity.minimumCoverage";
         public const string AgentAutoUpdate = "agent.autoUpdate";
+        public const string AgentProtectionEnabled = "agent.protectionEnabled";
+        public const string AgentProtectionSalt = "agent.protectionSalt";
+        public const string AgentProtectionHash = "agent.protectionHash";
     }
 
     public static readonly SystemSettingsDto Defaults = new(
@@ -38,7 +41,8 @@ public sealed class SettingsService(IKoshiDbContext db, AuditWriter audit, ICurr
         ScheduleAdherenceWeight: 0.3,
         ReportedActivityWeight: 0.2,
         MinimumCoverage: 0.5,
-        AgentAutoUpdate: true);
+        AgentAutoUpdate: true,
+        AgentProtectionEnabled: false);
 
     public async Task<SystemSettingsDto> GetAsync(CancellationToken ct = default)
     {
@@ -56,7 +60,18 @@ public sealed class SettingsService(IKoshiDbContext db, AuditWriter audit, ICurr
             Dbl(map, Keys.ScheduleAdherenceWeight, d.ScheduleAdherenceWeight),
             Dbl(map, Keys.ReportedActivityWeight, d.ReportedActivityWeight),
             Dbl(map, Keys.MinimumCoverage, d.MinimumCoverage),
-            Bool(map, Keys.AgentAutoUpdate, d.AgentAutoUpdate));
+            Bool(map, Keys.AgentAutoUpdate, d.AgentAutoUpdate),
+            Bool(map, Keys.AgentProtectionEnabled, d.AgentProtectionEnabled));
+    }
+
+    /// <summary>Returns the Windows-Settings protection state and password verifier for agents.</summary>
+    public async Task<(bool Enabled, string? Salt, string? Hash)> GetProtectionAsync(CancellationToken ct = default)
+    {
+        var map = await db.SystemSettings.AsNoTracking().ToDictionaryAsync(s => s.Key, s => s.Value, ct);
+        var enabled = Bool(map, Keys.AgentProtectionEnabled, false);
+        var salt = map.GetValueOrDefault(Keys.AgentProtectionSalt);
+        var hash = map.GetValueOrDefault(Keys.AgentProtectionHash);
+        return (enabled && !string.IsNullOrEmpty(hash), salt, hash);
     }
 
     public async Task<SystemSettingsDto> UpdateAsync(UpdateSystemSettingsRequest r, CancellationToken ct = default)
@@ -83,7 +98,23 @@ public sealed class SettingsService(IKoshiDbContext db, AuditWriter audit, ICurr
             [Keys.ReportedActivityWeight] = r.ReportedActivityWeight.ToString(CultureInfo.InvariantCulture),
             [Keys.MinimumCoverage] = r.MinimumCoverage.ToString(CultureInfo.InvariantCulture),
             [Keys.AgentAutoUpdate] = r.AgentAutoUpdate ? "true" : "false",
+            [Keys.AgentProtectionEnabled] = r.AgentProtectionEnabled ? "true" : "false",
         };
+
+        var existingProtHash = await db.SystemSettings.AsNoTracking().Where(s => s.Key == Keys.AgentProtectionHash).Select(s => s.Value).FirstOrDefaultAsync(ct);
+        if (r.AgentProtectionEnabled)
+        {
+            if (!string.IsNullOrEmpty(r.AgentProtectionPassword))
+            {
+                var (salt, hash) = AppLockPassword.Create(r.AgentProtectionPassword);
+                values[Keys.AgentProtectionSalt] = salt;
+                values[Keys.AgentProtectionHash] = hash;
+            }
+            else if (string.IsNullOrEmpty(existingProtHash))
+            {
+                throw Errors.Validation(nameof(r.AgentProtectionPassword), "Himoyani yoqish uchun parol kiriting.");
+            }
+        }
 
         var existing = await db.SystemSettings.ToDictionaryAsync(s => s.Key, ct);
         var now = clock.GetUtcNow().UtcDateTime;

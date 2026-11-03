@@ -209,6 +209,7 @@ public sealed class PolicyService(IKoshiDbContext db, AuditWriter audit, ICurren
         var device = await db.Devices.AsNoTracking().Include(d => d.Employee).FirstOrDefaultAsync(d => d.Id == deviceId, ct) ?? throw Errors.NotFound("Device");
         if (device.Status == DeviceStatus.Revoked) throw Errors.CredentialRevoked();
         var s = await settings.GetAsync(ct);
+        var protection = await settings.GetProtectionAsync(ct);
         var effective = await ResolveEffectiveAsync(device, ct);
         var snap = effective?.Snapshot;
         var schedule = snap?.WorkSchedule ?? await DefaultScheduleDtoAsync(ct);
@@ -228,7 +229,10 @@ public sealed class PolicyService(IKoshiDbContext db, AuditWriter audit, ICurren
             schedule,
             snap?.Rules ?? [],
             s.MonitoringNotice,
-            s.SupportContact);
+            s.SupportContact,
+            protection.Enabled,
+            protection.Salt,
+            protection.Hash);
     }
 
     public async Task ReportResultAsync(Guid deviceId, PolicyResultReportRequest r, CancellationToken ct = default)

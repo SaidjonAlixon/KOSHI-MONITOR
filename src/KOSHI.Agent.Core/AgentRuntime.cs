@@ -291,7 +291,10 @@ public sealed class AgentRuntime : IAsyncDisposable
         }
     }
 
-    /// <summary>Fast 350ms enforcement loop: closes blocked apps immediately and prompts for password-locked apps whenever their window is visible.</summary>
+    // Windows surfaces that expose the uninstall path; locked when protection is enabled.
+    private static readonly string[] ProtectedProcessNames = ["SystemSettings"];
+
+    /// <summary>Fast 350ms enforcement loop: closes blocked apps immediately and prompts for password-locked apps whenever they run.</summary>
     private async Task EnforceRulesLoop(CancellationToken ct)
     {
         var currentSession = Process.GetCurrentProcess().SessionId;
@@ -299,8 +302,8 @@ public sealed class AgentRuntime : IAsyncDisposable
         {
             try
             {
-                var rules = _policy?.Rules;
-                if (_monitoringAllowed && rules is { Count: > 0 })
+                var policy = _policy;
+                if (_monitoringAllowed && policy is not null)
                 {
                     var fg = _source.GetForeground()?.ProcessName;
                     var normFg = string.IsNullOrEmpty(fg) ? null : NormalizeProc(fg);
@@ -314,17 +317,11 @@ public sealed class AgentRuntime : IAsyncDisposable
                             if (p.SessionId != currentSession) continue;
                             runningNames.Add(NormalizeProc(p.ProcessName));
                         }
-                        catch
-                        {
-                            // Ignore inaccessible process
-                        }
-                        finally
-                        {
-                            p.Dispose();
-                        }
+                        catch { /* Ignore inaccessible process */ }
+                        finally { p.Dispose(); }
                     }
 
-                    foreach (var rule in rules)
+                    foreach (var rule in policy.Rules)
                     {
                         var target = NormalizeProc(rule.ProcessName);
                         if (string.IsNullOrEmpty(target)) continue;
@@ -340,44 +337,20 @@ public sealed class AgentRuntime : IAsyncDisposable
                             continue;
                         }
 
-                        if (!rule.RequirePassword || string.IsNullOrEmpty(rule.PasswordHash)) continue;
+                        if (rule.RequirePassword && !string.IsNullOrEmpty(rule.PasswordHash))
+                            EnforcePasswordLock(rule, runningNames, normFg);
+                    }
 
-                        var isRunning = runningNames.Contains(target)
-                                        || (normFg is not null && string.Equals(normFg, target, StringComparison.OrdinalIgnoreCase));
-
-                        if (!isRunning)
+                    // Built-in protection: lock Windows Settings (uninstall path) behind the admin password.
+                    if (policy.ProtectionEnabled && !string.IsNullOrEmpty(policy.ProtectionHash))
+                    {
+                        foreach (var name in ProtectedProcessNames)
                         {
-                            lock (_gate) _unlockedApps.Remove(target);
-                            continue;
-                        }
-
-                        bool isUnlocked;
-                        DateTime unlockedAt;
-                        lock (_gate) isUnlocked = _unlockedApps.TryGetValue(target, out unlockedAt);
-
-                        if (isUnlocked)
-                        {
-                            // Once unlocked, if the user closes the window (e.g. Telegram hides to tray), terminate & re-lock after 4s grace window
-                            if ((DateTime.UtcNow - unlockedAt).TotalSeconds >= 4.0 && !_appLockHost.HasActiveVisibleWindow(rule.ProcessName))
-                            {
-                                lock (_gate) _unlockedApps.Remove(target);
-                                _appLockHost.TerminateApp(rule.ProcessName);
-                            }
-                            continue;
-                        }
-
-                        // Process is running and NOT unlocked: freeze immediately and demand password
-                        if (_appLockHost.ChallengeAndEnforce(rule))
-                        {
-                            lock (_gate) _unlockedApps[target] = DateTime.UtcNow;
-                        }
-                        else
-                        {
-                            lock (_gate)
-                            {
-                                _unlockedApps.Remove(target);
-                                _tracker.AddViolation(rule.ProcessName, DateTime.UtcNow, "password_denied");
-                            }
+                            var protRule = new AgentApplicationRuleDto(
+                                Guid.Empty, "Windows Sozlamalari — himoyalangan", $"{name}.exe", null, null,
+                                ApplicationClassificationDto.Neutral, ApplicationRestrictionDto.None, null,
+                                true, policy.ProtectionSalt, policy.ProtectionHash);
+                            EnforcePasswordLock(protRule, runningNames, normFg);
                         }
                     }
                 }
@@ -388,6 +361,50 @@ public sealed class AgentRuntime : IAsyncDisposable
             }
 
             await Task.Delay(350, ct);
+        }
+    }
+
+    private void EnforcePasswordLock(AgentApplicationRuleDto rule, HashSet<string> runningNames, string? normFg)
+    {
+        var target = NormalizeProc(rule.ProcessName);
+        if (string.IsNullOrEmpty(target)) return;
+
+        var isRunning = runningNames.Contains(target)
+                        || (normFg is not null && string.Equals(normFg, target, StringComparison.OrdinalIgnoreCase));
+
+        if (!isRunning)
+        {
+            lock (_gate) _unlockedApps.Remove(target);
+            return;
+        }
+
+        bool isUnlocked;
+        DateTime unlockedAt;
+        lock (_gate) isUnlocked = _unlockedApps.TryGetValue(target, out unlockedAt);
+
+        if (isUnlocked)
+        {
+            // Once unlocked, re-lock (and close) after the user hides/closes the window (4s grace window for restore).
+            if ((DateTime.UtcNow - unlockedAt).TotalSeconds >= 4.0 && !_appLockHost.HasActiveVisibleWindow(rule.ProcessName))
+            {
+                lock (_gate) _unlockedApps.Remove(target);
+                _appLockHost.TerminateApp(rule.ProcessName);
+            }
+            return;
+        }
+
+        // Running and NOT unlocked: freeze immediately and demand the password.
+        if (_appLockHost.ChallengeAndEnforce(rule))
+        {
+            lock (_gate) _unlockedApps[target] = DateTime.UtcNow;
+        }
+        else
+        {
+            lock (_gate)
+            {
+                _unlockedApps.Remove(target);
+                _tracker.AddViolation(rule.ProcessName, DateTime.UtcNow, "password_denied");
+            }
         }
     }
 

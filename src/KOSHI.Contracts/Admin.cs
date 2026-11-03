@@ -575,7 +575,8 @@ public sealed record SystemSettingsDto(
     double ScheduleAdherenceWeight,
     double ReportedActivityWeight,
     double MinimumCoverage,
-    bool AgentAutoUpdate);
+    bool AgentAutoUpdate,
+    bool AgentProtectionEnabled = false);
 
 public sealed class UpdateSystemSettingsRequest
 {
@@ -614,6 +615,13 @@ public sealed class UpdateSystemSettingsRequest
 
     /// <summary>Allow agents to download and install newer versions automatically.</summary>
     public bool AgentAutoUpdate { get; set; } = true;
+
+    /// <summary>Require the admin protection password to open Windows Settings (blocks uninstall path) on agents.</summary>
+    public bool AgentProtectionEnabled { get; set; }
+
+    /// <summary>New protection password (plaintext). Leave null to keep the existing one.</summary>
+    [StringLength(128, MinimumLength = 4)]
+    public string? AgentProtectionPassword { get; set; }
 }
 
 public sealed record DashboardSummaryDto(

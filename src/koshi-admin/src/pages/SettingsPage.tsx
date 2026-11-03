@@ -253,6 +253,38 @@ export function SettingsPage() {
           </div>
         </Card>
         <Card className="xl:col-span-2">
+          <CardHeader title="Tizim himoyasi" subtitle="Agentni o‘chirish yo‘lini (Windows Sozlamalari) paroldan himoyalash" />
+          <div className="space-y-4 p-5">
+            <Checkbox
+              label={
+                <span>
+                  <span className="font-medium">Windows Sozlamalarini parol bilan himoyalash</span>
+                  <span className="block text-xs text-slate-500">
+                    Yoqilsa, xodim kompyuterda Windows “Sozlamalar” (Параметры) ilovasini ochganda admin paroli so‘raladi. Parolsiz ochilmaydi — demak “Ilovalar → O‘chirish” orqali KOSHI’ni o‘chirib bo‘lmaydi. (KOSHI o‘zi allaqachon o‘chirish ro‘yxatida ko‘rinmaydi.)
+                  </span>
+                </span>
+              }
+              disabled={!editable}
+              checked={form.agentProtectionEnabled}
+              onChange={(e) => set({ agentProtectionEnabled: e.target.checked })}
+            />
+            {form.agentProtectionEnabled && (
+              <Field label="Himoya paroli (bo‘sh — eskisi qoladi)" hint="Faqat admin biladi. Xodim Windows Sozlamalarini ochganda shu parol so‘raladi.">
+                <Input
+                  type="text"
+                  minLength={4}
+                  maxLength={128}
+                  disabled={!editable}
+                  value={form.agentProtectionPassword ?? ''}
+                  onChange={(e) => set({ agentProtectionPassword: e.target.value })}
+                  placeholder="kamida 4 belgi"
+                  className="w-64"
+                />
+              </Field>
+            )}
+          </div>
+        </Card>
+        <Card className="xl:col-span-2">
           <CardHeader title="Agentdagi xabarlar" subtitle="Xodim tray oynasida ko‘radi" />
           <div className="p-5">
             <Field label="Monitoring siyosati xabari">
