@@ -279,6 +279,54 @@ public sealed class DeviceService(
         return await GetAsync(id, ct);
     }
 
+    /// <summary>Records the start of a real-time agent connection (exact online time).</summary>
+    public async Task MarkConnectedAsync(Guid deviceId, string connectionId, CancellationToken ct = default)
+    {
+        var now = Now;
+        var device = await db.Devices.FirstOrDefaultAsync(d => d.Id == deviceId, ct);
+        if (device is null) return;
+        var stale = await db.DeviceConnections.Where(c => c.DeviceId == deviceId && c.DisconnectedAt == null && c.ConnectionId != connectionId).ToListAsync(ct);
+        foreach (var s in stale) s.DisconnectedAt = now;
+        db.DeviceConnections.Add(new DeviceConnection { Id = Guid.NewGuid(), DeviceId = deviceId, ConnectedAt = now, ConnectionId = connectionId });
+        device.ConnectedAt ??= now;
+        device.DisconnectedAt = null;
+        var openOffline = await db.Alerts.Where(a => a.DeviceId == deviceId && a.Type == AlertType.DeviceOffline && a.ResolvedAt == null).ToListAsync(ct);
+        foreach (var a in openOffline) a.ResolvedAt = now;
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Records the end of a real-time agent connection (exact offline time).</summary>
+    public async Task MarkDisconnectedAsync(Guid deviceId, string connectionId, CancellationToken ct = default)
+    {
+        var now = Now;
+        var open = await db.DeviceConnections.Where(c => c.DeviceId == deviceId && c.ConnectionId == connectionId && c.DisconnectedAt == null).ToListAsync(ct);
+        foreach (var c in open) c.DisconnectedAt = now;
+        var stillOpen = await db.DeviceConnections.AnyAsync(c => c.DeviceId == deviceId && c.DisconnectedAt == null, ct);
+        if (!stillOpen)
+        {
+            var device = await db.Devices.FirstOrDefaultAsync(d => d.Id == deviceId, ct);
+            if (device is not null)
+            {
+                device.ConnectedAt = null;
+                device.DisconnectedAt = now;
+                device.CurrentProcessName = null;
+                device.CurrentWindowTitle = null;
+                device.CurrentState = null;
+            }
+        }
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<DeviceConnectionDto>> ConnectionsAsync(Guid id, int days, CancellationToken ct = default)
+    {
+        await LoadAsync(id, ct);
+        var since = Now.AddDays(-Math.Clamp(days, 1, 90));
+        var rows = await db.DeviceConnections.AsNoTracking()
+            .Where(c => c.DeviceId == id && (c.DisconnectedAt == null || c.DisconnectedAt >= since))
+            .OrderByDescending(c => c.ConnectedAt).Take(500).ToListAsync(ct);
+        return rows.Select(c => new DeviceConnectionDto(c.ConnectedAt, c.DisconnectedAt, c.DurationSeconds)).ToList();
+    }
+
     public async Task<DeviceStatusDto> StatusAsync(Guid id, CancellationToken ct = default)
     {
         var s = await settings.GetAsync(ct);
@@ -287,7 +335,7 @@ public sealed class DeviceService(
         var since = now.AddHours(-1);
         var recent = await db.DeviceHeartbeats.CountAsync(h => h.DeviceId == id && h.ReceivedAt >= since, ct);
         return new DeviceStatusDto(d.Id, d.Status.ToString(), d.IsOnline(now, TimeSpan.FromSeconds(s.OfflineThresholdSeconds)),
-            d.LastHeartbeatAt, d.MonitoringEnabled, d.CurrentProcessName, d.CurrentState?.ToString(), d.AppliedPolicyVersion, recent);
+            d.LastHeartbeatAt, d.ConnectedAt, d.DisconnectedAt, d.MonitoringEnabled, d.CurrentProcessName, d.CurrentState?.ToString(), d.AppliedPolicyVersion, recent);
     }
 
     private async Task<Device> LoadAsync(Guid id, CancellationToken ct)

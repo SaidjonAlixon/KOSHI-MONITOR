@@ -49,7 +49,7 @@ public sealed class RemoteRegistry
 
 /// <summary>Agent side of remote control. Authenticated with the device credential.</summary>
 [Authorize(Policy = AuthSchemes.DevicePolicy)]
-public sealed class AgentHub(RemoteRegistry registry, IHubContext<RemoteHub> admins, IServiceScopeFactory scopes, ILogger<AgentHub> logger) : Hub
+public sealed class AgentHub(RemoteRegistry registry, IHubContext<RemoteHub> admins, IHubContext<MonitoringHub> monitoring, IServiceScopeFactory scopes, ILogger<AgentHub> logger) : Hub
 {
     public const string Path = "/hubs/agent";
 
@@ -64,6 +64,9 @@ public sealed class AgentHub(RemoteRegistry registry, IHubContext<RemoteHub> adm
         }
         registry.AgentConnected(DeviceId, Context.ConnectionId);
         await Groups.AddToGroupAsync(Context.ConnectionId, Group(DeviceId));
+        using (var scope = scopes.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<DeviceService>().MarkConnectedAsync(DeviceId, Context.ConnectionId);
+        await monitoring.Clients.All.SendAsync("deviceChanged", DeviceId);
         await base.OnConnectedAsync();
     }
 
@@ -71,6 +74,9 @@ public sealed class AgentHub(RemoteRegistry registry, IHubContext<RemoteHub> adm
     {
         var deviceId = DeviceId;
         registry.AgentDisconnected(deviceId, Context.ConnectionId);
+        using (var scope = scopes.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<DeviceService>().MarkDisconnectedAsync(deviceId, Context.ConnectionId);
+        await monitoring.Clients.All.SendAsync("deviceChanged", deviceId);
         if (!registry.IsAgentConnected(deviceId))
         {
             foreach (var s in registry.ForDevice(deviceId))

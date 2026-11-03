@@ -22,6 +22,7 @@ public sealed class KoshiDbContext(DbContextOptions<KoshiDbContext> options) : D
     public DbSet<DeviceActivation> DeviceActivations => Set<DeviceActivation>();
     public DbSet<DeviceCredential> DeviceCredentials => Set<DeviceCredential>();
     public DbSet<DeviceHeartbeat> DeviceHeartbeats => Set<DeviceHeartbeat>();
+    public DbSet<DeviceConnection> DeviceConnections => Set<DeviceConnection>();
     public DbSet<ApplicationEvent> ApplicationEvents => Set<ApplicationEvent>();
     public DbSet<ActivitySession> ActivitySessions => Set<ActivitySession>();
     public DbSet<ApplicationUsageSummary> ApplicationUsageSummaries => Set<ApplicationUsageSummary>();
@@ -143,6 +144,14 @@ public sealed class KoshiDbContext(DbContextOptions<KoshiDbContext> options) : D
             e.HasIndex(x => new { x.DeviceId, x.ReceivedAt });
             e.HasIndex(x => x.ReceivedAt);
             e.HasOne<Device>().WithMany().HasForeignKey(x => x.DeviceId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<DeviceConnection>(e =>
+        {
+            e.Property(x => x.ConnectionId).HasMaxLength(64);
+            e.HasIndex(x => new { x.DeviceId, x.ConnectedAt });
+            e.HasIndex(x => x.DisconnectedAt);
+            e.HasOne(x => x.Device).WithMany().HasForeignKey(x => x.DeviceId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<ApplicationEvent>(e =>

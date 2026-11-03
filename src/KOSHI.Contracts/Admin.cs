@@ -73,11 +73,15 @@ public sealed record DeviceStatusDto(
     string Status,
     bool IsOnline,
     DateTime? LastHeartbeatAt,
+    DateTime? ConnectedAt,
+    DateTime? DisconnectedAt,
     bool MonitoringEnabled,
     string? CurrentProcessName,
     string? CurrentState,
     int? AppliedPolicyVersion,
     int RecentHeartbeatCount);
+
+public sealed record DeviceConnectionDto(DateTime ConnectedAt, DateTime? DisconnectedAt, int? DurationSeconds);
 
 // ---------- Employees / Departments ----------
 
@@ -344,6 +348,9 @@ public sealed record LiveDeviceDto(
     DateTime? ActivityStartedAt,
     int? ActivityDurationSeconds,
     DateTime? LastHeartbeatAt,
+    DateTime? ConnectedAt,
+    DateTime? DisconnectedAt,
+    int? OnlineSeconds,
     string AgentStatus,
     bool MonitoringEnabled);
 

@@ -17,6 +17,12 @@ public sealed class Device
     public DateTime? BlockedAt { get; set; }
     public DateTime? RevokedAt { get; set; }
     public DateTime? LastHeartbeatAt { get; set; }
+
+    /// <summary>Set when the agent's real-time channel connects; null while the agent is offline. Gives an exact "online since".</summary>
+    public DateTime? ConnectedAt { get; set; }
+
+    /// <summary>Time the agent channel last disconnected (exact "offline since").</summary>
+    public DateTime? DisconnectedAt { get; set; }
     public bool MonitoringEnabled { get; set; }
 
     // Snapshot of the current foreground activity, refreshed by heartbeats (used by Live Monitoring).
@@ -61,6 +67,19 @@ public sealed class DeviceCredential
     public DateTime CreatedAt { get; set; }
     public DateTime? RevokedAt { get; set; }
     public DateTime? LastUsedAt { get; set; }
+}
+
+/// <summary>One real-time connection session of an agent, giving an exact online/offline history.</summary>
+public sealed class DeviceConnection
+{
+    public Guid Id { get; set; }
+    public Guid DeviceId { get; set; }
+    public Device? Device { get; set; }
+    public DateTime ConnectedAt { get; set; }
+    public DateTime? DisconnectedAt { get; set; }
+    public string? ConnectionId { get; set; }
+
+    public int? DurationSeconds => DisconnectedAt is { } d ? (int)Math.Max(0, (d - ConnectedAt).TotalSeconds) : null;
 }
 
 public sealed class DeviceHeartbeat

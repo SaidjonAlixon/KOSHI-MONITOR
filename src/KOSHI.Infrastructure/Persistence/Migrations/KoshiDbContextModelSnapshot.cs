@@ -61,7 +61,7 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("DeviceId", "StartedAt");
 
-                    b.ToTable("ActivitySessions");
+                    b.ToTable("ActivitySessions", (string)null);
                 });
 
             modelBuilder.Entity("KOSHI.Domain.Alert", b =>
@@ -108,7 +108,7 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ResolvedAt", "CreatedAt");
 
-                    b.ToTable("Alerts");
+                    b.ToTable("Alerts", (string)null);
                 });
 
             modelBuilder.Entity("KOSHI.Domain.ApplicationEvent", b =>
@@ -161,7 +161,7 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("DeviceId", "StartedAt");
 
-                    b.ToTable("ApplicationEvents");
+                    b.ToTable("ApplicationEvents", (string)null);
                 });
 
             modelBuilder.Entity("KOSHI.Domain.ApplicationRule", b =>
@@ -215,7 +215,7 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
                     b.HasIndex("PolicyId", "ProcessName")
                         .IsUnique();
 
-                    b.ToTable("ApplicationRules");
+                    b.ToTable("ApplicationRules", (string)null);
                 });
 
             modelBuilder.Entity("KOSHI.Domain.ApplicationUsageSummary", b =>
@@ -254,7 +254,7 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
                     b.HasIndex("DeviceId", "Date", "ProcessName")
                         .IsUnique();
 
-                    b.ToTable("ApplicationUsageSummaries");
+                    b.ToTable("ApplicationUsageSummaries", (string)null);
                 });
 
             modelBuilder.Entity("KOSHI.Domain.AuditLog", b =>
@@ -310,7 +310,7 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("OccurredAt");
 
-                    b.ToTable("AuditLogs");
+                    b.ToTable("AuditLogs", (string)null);
                 });
 
             modelBuilder.Entity("KOSHI.Domain.Department", b =>
@@ -339,7 +339,7 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("Departments");
+                    b.ToTable("Departments", (string)null);
                 });
 
             modelBuilder.Entity("KOSHI.Domain.Device", b =>
@@ -368,6 +368,9 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("BlockedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("ConnectedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -386,6 +389,9 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(512)");
 
                     b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DisconnectedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("DisplayName")
@@ -427,7 +433,7 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Status");
 
-                    b.ToTable("Devices");
+                    b.ToTable("Devices", (string)null);
                 });
 
             modelBuilder.Entity("KOSHI.Domain.DeviceActivation", b =>
@@ -470,7 +476,35 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("DeviceId");
 
-                    b.ToTable("DeviceActivations");
+                    b.ToTable("DeviceActivations", (string)null);
+                });
+
+            modelBuilder.Entity("KOSHI.Domain.DeviceConnection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ConnectedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ConnectionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("DeviceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("DisconnectedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DisconnectedAt");
+
+                    b.HasIndex("DeviceId", "ConnectedAt");
+
+                    b.ToTable("DeviceConnections", (string)null);
                 });
 
             modelBuilder.Entity("KOSHI.Domain.DeviceCredential", b =>
@@ -500,7 +534,7 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("DeviceId");
 
-                    b.ToTable("DeviceCredentials");
+                    b.ToTable("DeviceCredentials", (string)null);
                 });
 
             modelBuilder.Entity("KOSHI.Domain.DeviceHeartbeat", b =>
@@ -537,7 +571,7 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("DeviceId", "ReceivedAt");
 
-                    b.ToTable("DeviceHeartbeats");
+                    b.ToTable("DeviceHeartbeats", (string)null);
                 });
 
             modelBuilder.Entity("KOSHI.Domain.Employee", b =>
@@ -594,7 +628,7 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("WorkScheduleId");
 
-                    b.ToTable("Employees");
+                    b.ToTable("Employees", (string)null);
                 });
 
             modelBuilder.Entity("KOSHI.Domain.Policy", b =>
@@ -689,7 +723,7 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("WorkScheduleId");
 
-                    b.ToTable("Policies", t =>
+                    b.ToTable("Policies", null, t =>
                         {
                             t.HasCheckConstraint("CK_Policies_NoScreenshots", "\"ScreenshotsEnabled\" = false");
                         });
@@ -724,7 +758,7 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("PolicyId");
 
-                    b.ToTable("PolicyAssignments", t =>
+                    b.ToTable("PolicyAssignments", null, t =>
                         {
                             t.HasCheckConstraint("CK_PolicyAssignments_Target", "(\"Scope\" = 0 AND \"DepartmentId\" IS NULL AND \"DeviceId\" IS NULL) OR (\"Scope\" = 1 AND \"DepartmentId\" IS NOT NULL AND \"DeviceId\" IS NULL) OR (\"Scope\" = 2 AND \"DeviceId\" IS NOT NULL AND \"DepartmentId\" IS NULL)");
                         });
@@ -773,7 +807,7 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("PolicyId", "PolicyVersion", "Status");
 
-                    b.ToTable("PolicyExecutionResults");
+                    b.ToTable("PolicyExecutionResults", (string)null);
                 });
 
             modelBuilder.Entity("KOSHI.Domain.PolicyVersion", b =>
@@ -807,7 +841,7 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
                     b.HasIndex("PolicyId", "Version")
                         .IsUnique();
 
-                    b.ToTable("PolicyVersions");
+                    b.ToTable("PolicyVersions", (string)null);
                 });
 
             modelBuilder.Entity("KOSHI.Domain.RefreshToken", b =>
@@ -858,7 +892,7 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("RefreshTokens");
+                    b.ToTable("RefreshTokens", (string)null);
                 });
 
             modelBuilder.Entity("KOSHI.Domain.Role", b =>
@@ -892,7 +926,7 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("Roles");
+                    b.ToTable("Roles", (string)null);
 
                     b.HasData(
                         new
@@ -956,7 +990,7 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
                     b.HasIndex("Key")
                         .IsUnique();
 
-                    b.ToTable("SystemSettings");
+                    b.ToTable("SystemSettings", (string)null);
                 });
 
             modelBuilder.Entity("KOSHI.Domain.User", b =>
@@ -1019,7 +1053,7 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
                     b.HasIndex("NormalizedEmail")
                         .IsUnique();
 
-                    b.ToTable("Users");
+                    b.ToTable("Users", (string)null);
                 });
 
             modelBuilder.Entity("KOSHI.Domain.UserRole", b =>
@@ -1034,7 +1068,7 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("RoleId");
 
-                    b.ToTable("UserRoles");
+                    b.ToTable("UserRoles", (string)null);
                 });
 
             modelBuilder.Entity("KOSHI.Domain.WorkSchedule", b =>
@@ -1079,7 +1113,7 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("WorkSchedules");
+                    b.ToTable("WorkSchedules", (string)null);
                 });
 
             modelBuilder.Entity("KOSHI.Domain.ActivitySession", b =>
@@ -1147,6 +1181,17 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
                 });
 
             modelBuilder.Entity("KOSHI.Domain.DeviceActivation", b =>
+                {
+                    b.HasOne("KOSHI.Domain.Device", "Device")
+                        .WithMany()
+                        .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Device");
+                });
+
+            modelBuilder.Entity("KOSHI.Domain.DeviceConnection", b =>
                 {
                     b.HasOne("KOSHI.Domain.Device", "Device")
                         .WithMany()

@@ -63,6 +63,12 @@ public sealed class DevicesController(DeviceService devices, PolicyService polic
     [Authorize(Policy = Permissions.DevicesRead)]
     public async Task<ActionResult<DeviceStatusDto>> Status(Guid id, CancellationToken ct) => Ok(await devices.StatusAsync(id, ct));
 
+    /// <summary>Exact online/offline session history for the device.</summary>
+    [HttpGet("{id:guid}/connections")]
+    [Authorize(Policy = Permissions.DevicesRead)]
+    public async Task<ActionResult<IReadOnlyList<DeviceConnectionDto>>> Connections(Guid id, [FromQuery] int days = 7, CancellationToken ct = default) =>
+        Ok(await devices.ConnectionsAsync(id, days, ct));
+
     [HttpGet("{id:guid}/policy-status")]
     [Authorize(Policy = Permissions.PoliciesRead)]
     public async Task<ActionResult<DevicePolicyStatusDto>> PolicyStatus(Guid id, CancellationToken ct) =>

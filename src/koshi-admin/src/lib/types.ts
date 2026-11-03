@@ -86,8 +86,17 @@ export interface LiveDevice {
   activityStartedAt: string | null
   activityDurationSeconds: number | null
   lastHeartbeatAt: string | null
+  connectedAt: string | null
+  disconnectedAt: string | null
+  onlineSeconds: number | null
   agentStatus: 'Online' | 'Offline' | 'Paused' | 'Blocked'
   monitoringEnabled: boolean
+}
+
+export interface DeviceConnection {
+  connectedAt: string
+  disconnectedAt: string | null
+  durationSeconds: number | null
 }
 
 export interface Employee {

@@ -13,6 +13,7 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddWindowsService(o => o.ServiceName = "KOSHIAgentService");
 builder.Services.AddSerilog();
 builder.Services.AddHostedService<PolicyEnforcementWorker>();
+builder.Services.AddHostedService<SessionAgentWatchdog>();
 
 var host = builder.Build();
 await host.RunAsync();

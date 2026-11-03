@@ -24,6 +24,7 @@ public sealed class MonitoringService(IKoshiDbContext db, SettingsService settin
             var online = d.IsOnline(now, threshold);
             var status = d.Status == DeviceStatus.Blocked ? "Blocked" : !online ? "Offline" : d.MonitoringEnabled ? "Online" : "Paused";
             var started = online ? d.CurrentActivityStartedAt : null;
+            var connectedSince = d.ConnectedAt;
             return new LiveDeviceDto(
                 d.Id, d.DisplayName, d.Employee?.FullName, d.Employee?.Department?.Name,
                 online ? d.CurrentProcessName : null,
@@ -31,7 +32,9 @@ public sealed class MonitoringService(IKoshiDbContext db, SettingsService settin
                 online ? d.CurrentState?.ToString() : null,
                 started,
                 started is { } st ? (int)Math.Max(0, (now - st).TotalSeconds) : null,
-                d.LastHeartbeatAt, status, d.MonitoringEnabled && online);
+                d.LastHeartbeatAt, connectedSince, d.DisconnectedAt,
+                connectedSince is { } cs ? (int)Math.Max(0, (now - cs).TotalSeconds) : null,
+                status, d.MonitoringEnabled && online);
         }).ToList();
     }
 

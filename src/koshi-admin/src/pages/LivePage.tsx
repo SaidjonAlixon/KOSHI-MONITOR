@@ -66,8 +66,9 @@ export function LivePage() {
                   <th className={th}>Qurilma</th>
                   <th className={th}>Faol dastur</th>
                   <th className={th}>Faol oyna</th>
-                  <th className={th}>Boshlangan</th>
+                  <th className={th}>Faoliyat boshlandi</th>
                   <th className={th}>Davomiylik</th>
+                  <th className={th}>Onlayn holati</th>
                   <th className={th}>Oxirgi heartbeat</th>
                   <th className={th}>Agent</th>
                 </tr>
@@ -97,6 +98,15 @@ export function LivePage() {
                     <td className={`${td} text-xs`}>
                       {formatDuration(d.activityDurationSeconds)}
                       {d.currentState === 'Idle' && <span className="ml-1 text-violet-500">(idle)</span>}
+                    </td>
+                    <td className={`${td} text-xs`}>
+                      {d.agentStatus === 'Offline' ? (
+                        d.disconnectedAt ? <span className="text-slate-500">{formatDateTime(d.disconnectedAt)} dan offlayn</span> : <span className="text-slate-400">offlayn</span>
+                      ) : (
+                        <span className="text-emerald-600 dark:text-emerald-400">
+                          {formatDateTime(d.connectedAt)} dan · {formatDuration(d.onlineSeconds)}
+                        </span>
+                      )}
                     </td>
                     <td className={`${td} text-xs`}>{formatDateTime(d.lastHeartbeatAt)}</td>
                     <td className={td}>

@@ -1,13 +1,47 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Ban, Copy, Download, KeyRound, MonitorPlay, Pencil, Plus, RotateCcw, ShieldOff } from 'lucide-react'
+import { Ban, Copy, Download, History, KeyRound, MonitorPlay, Pencil, Plus, RotateCcw, ShieldOff } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { Field, Input, Modal, PageHeader, Pagination, Select, SortHeader, tableClass, tbodyClass, td, th, theadClass, useEmployeesLookup, type SortState } from '@/components/forms'
-import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, LoadingState, formatDateTime } from '@/components/ui'
+import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, LoadingState, formatDateTime, formatDuration } from '@/components/ui'
 import { api } from '@/lib/api'
 import { Permissions, useAuth } from '@/lib/auth'
 import { AGENT_INSTALLER } from '@/lib/labels'
-import type { ActivationCode, Device, PagedResult } from '@/lib/types'
+import type { ActivationCode, Device, DeviceConnection, PagedResult } from '@/lib/types'
+
+function ConnectionsModal({ device, onClose }: { device: Device; onClose: () => void }) {
+  const q = useQuery({ queryKey: ['connections', device.id], queryFn: () => api<DeviceConnection[]>(`/api/devices/${device.id}/connections`, { query: { days: 14 } }) })
+  return (
+    <Modal open title={`Onlayn tarix — ${device.displayName}`} onClose={onClose} wide>
+      {q.isPending ? (
+        <LoadingState />
+      ) : q.isError ? (
+        <ErrorState error={q.error} />
+      ) : q.data.length === 0 ? (
+        <EmptyState title="Ulanishlar yo‘q" hint="Agent hali serverga real-time ulanmagan." />
+      ) : (
+        <table className={tableClass}>
+          <thead className={theadClass}>
+            <tr>
+              <th className={th}>Ulandi (onlayn)</th>
+              <th className={th}>Uzildi (offlayn)</th>
+              <th className={th}>Davomiylik</th>
+            </tr>
+          </thead>
+          <tbody className={tbodyClass}>
+            {q.data.map((c, i) => (
+              <tr key={i}>
+                <td className={`${td} text-xs`}>{formatDateTime(c.connectedAt)}</td>
+                <td className={`${td} text-xs`}>{c.disconnectedAt ? formatDateTime(c.disconnectedAt) : <Badge tone="green">Hozir onlayn</Badge>}</td>
+                <td className={`${td} text-xs`}>{formatDuration(c.durationSeconds)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Modal>
+  )
+}
 
 const statusTone = { Active: 'green', Pending: 'blue', Blocked: 'red', Revoked: 'gray' } as const
 const statusLabel = { Active: 'Faol', Pending: 'Aktivatsiya kutilmoqda', Blocked: 'Bloklangan', Revoked: 'Bekor qilingan' } as const
@@ -70,6 +104,7 @@ export function DevicesPage() {
   const [sort, setSort] = useState<SortState>({ by: 'displayName', dir: 'asc' })
   const [code, setCode] = useState<ActivationCode | null>(null)
   const [editing, setEditing] = useState<Device | 'new' | null>(null)
+  const [connections, setConnections] = useState<Device | null>(null)
   const manage = can(Permissions.DevicesManage)
 
   const q = useQuery({
@@ -211,7 +246,11 @@ export function DevicesPage() {
                       <br />
                       {d.agentVersion ? `Agent v${d.agentVersion}` : '—'}
                     </td>
-                    <td className={`${td} text-xs`}>{formatDateTime(d.lastHeartbeatAt)}</td>
+                    <td className={`${td} text-xs`}>
+                      <button className="inline-flex items-center gap-1 hover:text-brand-600" title="Onlayn tarixni ko‘rish" onClick={() => setConnections(d)}>
+                        {formatDateTime(d.lastHeartbeatAt)} <History className="size-3.5 text-slate-400" />
+                      </button>
+                    </td>
                     <td className={`${td} text-xs`}>{d.appliedPolicyVersion ? `v${d.appliedPolicyVersion}` : '—'}</td>
                     {manage && (
                       <td className={td}>
@@ -255,6 +294,7 @@ export function DevicesPage() {
       <Modal open={editing !== null} title={editing === 'new' ? 'Yangi qurilma' : 'Qurilmani tahrirlash'} onClose={() => setEditing(null)}>
         {editing !== null && <DeviceForm device={editing === 'new' ? null : editing} onDone={() => setEditing(null)} onCode={setCode} />}
       </Modal>
+      {connections && <ConnectionsModal device={connections} onClose={() => setConnections(null)} />}
     </>
   )
 }
