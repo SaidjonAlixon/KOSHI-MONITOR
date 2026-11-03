@@ -74,6 +74,35 @@ function ScheduleForm({ schedule, onDone }: { schedule: WorkSchedule | null; onD
   )
 }
 
+// Protection password: exactly 7 chars = 3 letters + 2 digits + 2 symbols
+function randomInt(maxExclusive: number): number {
+  const r = crypto.getRandomValues(new Uint32Array(1))[0] ?? 0
+  return Math.floor((r / 2 ** 32) * maxExclusive)
+}
+
+function generateProtectionPassword(): string {
+  const letters = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ'
+  const digits = '23456789'
+  const symbols = '!@#$%&*?'
+  const pick = (set: string) => set.charAt(randomInt(set.length))
+  const chars = [pick(letters), pick(letters), pick(letters), pick(digits), pick(digits), pick(symbols), pick(symbols)]
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1)
+    const tmp = chars[i]!
+    chars[i] = chars[j]!
+    chars[j] = tmp
+  }
+  return chars.join('')
+}
+
+function isValidProtectionPassword(p: string): boolean {
+  if (p.length !== 7) return false
+  const letters = (p.match(/[A-Za-z]/g) ?? []).length
+  const digits = (p.match(/[0-9]/g) ?? []).length
+  const symbols = (p.match(/[^A-Za-z0-9\s]/g) ?? []).length
+  return letters === 3 && digits === 2 && symbols === 2
+}
+
 function bumpPatch(version: string): string {
   const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(version.trim())
   if (!m) return version
@@ -253,34 +282,54 @@ export function SettingsPage() {
           </div>
         </Card>
         <Card className="xl:col-span-2">
-          <CardHeader title="Tizim himoyasi" subtitle="Agentni o‘chirish yo‘lini (Windows Sozlamalari) paroldan himoyalash" />
+          <CardHeader title="Tizim himoyasi" subtitle="Kompyuter sozlamalariga (nastroyka) kirishni paroldan himoyalash — agentni o‘chirish yo‘li bloklanadi" />
           <div className="space-y-4 p-5">
             <Checkbox
               label={
                 <span>
-                  <span className="font-medium">Windows Sozlamalarini parol bilan himoyalash</span>
+                  <span className="font-medium">Kompyuter sozlamalariga kirish uchun parol so‘ralsin</span>
                   <span className="block text-xs text-slate-500">
-                    Yoqilsa, xodim kompyuterda Windows “Sozlamalar” (Параметры) ilovasini ochganda admin paroli so‘raladi. Parolsiz ochilmaydi — demak “Ilovalar → O‘chirish” orqali KOSHI’ni o‘chirib bo‘lmaydi. (KOSHI o‘zi allaqachon o‘chirish ro‘yxatida ko‘rinmaydi.)
+                    Yoqilsa, xodim Windows “Sozlamalar” (Параметры) ilovasini ochganda: “Kompyuter sozlamalariga kirish uchun parol kiriting” degan oyna chiqadi. Parolsiz ochilmaydi — shu bois “Ilovalar → O‘chirish” orqali KOSHI’ni o‘chirib bo‘lmaydi. (KOSHI o‘zi allaqachon o‘chirish ro‘yxatida ko‘rinmaydi.)
                   </span>
                 </span>
               }
               disabled={!editable}
               checked={form.agentProtectionEnabled}
-              onChange={(e) => set({ agentProtectionEnabled: e.target.checked })}
+              onChange={(e) => set({ agentProtectionEnabled: e.target.checked, ...(e.target.checked ? {} : { agentProtectionPassword: '' }) })}
             />
             {form.agentProtectionEnabled && (
-              <Field label="Himoya paroli (bo‘sh — eskisi qoladi)" hint="Faqat admin biladi. Xodim Windows Sozlamalarini ochganda shu parol so‘raladi.">
-                <Input
-                  type="text"
-                  minLength={4}
-                  maxLength={128}
-                  disabled={!editable}
-                  value={form.agentProtectionPassword ?? ''}
-                  onChange={(e) => set({ agentProtectionPassword: e.target.value })}
-                  placeholder="kamida 4 belgi"
-                  className="w-64"
-                />
-              </Field>
+              <div className="rounded-xl border border-slate-200 p-4 dark:border-white/10">
+                <Field
+                  label="Himoya paroli (bo‘sh qoldirilsa — eskisi saqlanadi)"
+                  hint="Qoida: 7 xonali — 3 ta harf, 2 ta raqam, 2 ta belgi. Tizim o‘zi ham yaratib berishi mumkin."
+                  error={form.agentProtectionPassword && !isValidProtectionPassword(form.agentProtectionPassword) ? 'Parol 7 xonali bo‘lishi va 3 harf, 2 raqam, 2 belgidan iborat bo‘lishi kerak.' : undefined}
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Input
+                      type="text"
+                      maxLength={7}
+                      disabled={!editable}
+                      value={form.agentProtectionPassword ?? ''}
+                      onChange={(e) => set({ agentProtectionPassword: e.target.value })}
+                      placeholder="masalan: aB3!k9#"
+                      className="w-48 font-mono tracking-widest"
+                    />
+                    {editable && (
+                      <>
+                        <Button type="button" variant="secondary" onClick={() => set({ agentProtectionPassword: generateProtectionPassword() })}>
+                          Avtomatik yaratish
+                        </Button>
+                        {form.agentProtectionPassword && (
+                          <Button type="button" variant="ghost" onClick={() => navigator.clipboard.writeText(form.agentProtectionPassword ?? '')}>
+                            Nusxa olish
+                          </Button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </Field>
+                <p className="mt-2 text-xs text-amber-600">Parolni eslab qoling yoki nusxa olib saqlang — xodimlar Windows Sozlamalarini ochish uchun aynan shu parolni so‘raydi.</p>
+              </div>
             )}
           </div>
         </Card>
