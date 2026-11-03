@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/KOSHI.Agent.Core/KOSHI.Agent.Core.csproj" />
+    <Project Path="src/KOSHI.Agent.Service/KOSHI.Agent.Service.csproj" />
+    <Project Path="src/KOSHI.Agent/KOSHI.Agent.csproj" />
+    <Project Path="src/KOSHI.Api/KOSHI.Api.csproj" />
+    <Project Path="src/KOSHI.Application/KOSHI.Application.csproj" />
+    <Project Path="src/KOSHI.Contracts/KOSHI.Contracts.csproj" />
+    <Project Path="src/KOSHI.Domain/KOSHI.Domain.csproj" />
+    <Project Path="src/KOSHI.Infrastructure/KOSHI.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/KOSHI.Agent.Tests/KOSHI.Agent.Tests.csproj" />
+    <Project Path="tests/KOSHI.IntegrationTests/KOSHI.IntegrationTests.csproj" />
+    <Project Path="tests/KOSHI.UnitTests/KOSHI.UnitTests.csproj" />
+  </Folder>
+</Solution>

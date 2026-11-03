@@ -1,0 +1,32 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+TestResults/
+artifacts/
+publish/
+
+# Node / Vite
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Secrets and local environment (never commit)
+.env
+.env.*
+!.env.example
+*.pfx
+*.pem
+*.key
+appsettings.*.local.json
+
+# Installer output
+deploy/installer/Output/
+
+# OS / editors
+Thumbs.db
+.DS_Store
+.idea/

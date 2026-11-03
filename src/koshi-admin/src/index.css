@@ -1,0 +1,56 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --color-brand-50: #eef6ff;
+  --color-brand-100: #d9ebff;
+  --color-brand-300: #7cc4ff;
+  --color-brand-400: #38bdf8;
+  --color-brand-500: #2f80ff;
+  --color-brand-600: #1d5ff0;
+  --color-brand-700: #1d4ed8;
+  --color-accent-500: #8b5cf6;
+  --color-accent-600: #7c3aed;
+  --color-ink-950: #070b1a;
+  --color-ink-900: #0b1226;
+  --color-ink-800: #121a35;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased dark:bg-ink-950 dark:text-slate-100;
+  }
+}
+
+@media print {
+  aside,
+  header,
+  .print\:hidden {
+    display: none !important;
+  }
+  main {
+    overflow: visible !important;
+  }
+  body {
+    background: white !important;
+  }
+}
+
+@utility brand-gradient {
+  background-image: linear-gradient(135deg, #22d3ee 0%, #2f80ff 45%, #8b5cf6 100%);
+}
+
+@utility brand-text {
+  background-image: linear-gradient(90deg, #38bdf8, #2f80ff 50%, #a78bfa);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}

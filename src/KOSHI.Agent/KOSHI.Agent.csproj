@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>KOSHI.Agent</AssemblyName>
+    <ApplicationIcon>Assets\koshi.ico</ApplicationIcon>
+    <Product>KOSHI Agent</Product>
+    <Description>KOSHI corporate monitoring agent (visible tray indicator)</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\koshi.ico" />
+    <Resource Include="Assets\koshi-icon.png" />
+    <Resource Include="Assets\koshi-logo.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KOSHI.Agent.Core\KOSHI.Agent.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.14" />
+    <PackageReference Include="Serilog.Extensions.Hosting" Version="10.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+  </ItemGroup>
+
+</Project>
