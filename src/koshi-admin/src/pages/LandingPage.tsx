@@ -104,24 +104,24 @@ export function LandingPage() {
   const releaseLabel = release ? `Versiya ${release.version} · ${release.buildDate} · ${(release.size / 1_048_576).toFixed(0)} MB` : 'Windows 10/11 · 64-bit'
 
   return (
-    <div className="min-h-full scroll-smooth bg-ink-950 text-slate-200">
+    <div className="min-h-full scroll-smooth bg-white text-slate-700">
       {/* ---------- Navbar ---------- */}
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
+      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
           <Link to="/" className="flex items-center" aria-label="KOSHI bosh sahifa">
             <KoshiLogo className="h-8" />
           </Link>
-          <nav className="hidden items-center gap-7 text-sm font-medium text-slate-600 lg:flex">
-            <NavLinks className="transition hover:text-brand-700" />
+          <nav className="hidden items-center gap-1 rounded-full border border-slate-200 bg-slate-50/80 p-1 text-sm font-medium text-slate-600 lg:flex">
+            <NavLinks className="rounded-full px-4 py-1.5 transition hover:bg-white hover:text-brand-600 hover:shadow-sm" />
           </nav>
-          <div className="flex items-center gap-2">
-            <a href={AGENT_INSTALLER} download className="hidden items-center gap-2 rounded-xl border border-slate-200 px-3.5 py-2 text-sm font-medium text-slate-700 transition hover:border-brand-300 hover:bg-brand-50 sm:inline-flex">
+          <div className="flex items-center gap-2.5">
+            <a href={AGENT_INSTALLER} download className="hidden items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 sm:inline-flex">
               <Download className="size-4" /> Agent (EXE)
             </a>
-            <Link to={cta.to} className="brand-gradient rounded-xl px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-brand-600/30 transition hover:brightness-110">
-              {user ? 'Panel' : 'Kirish'}
+            <Link to={cta.to} className="brand-gradient inline-flex items-center gap-1.5 rounded-full px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-brand-600/25 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-brand-600/30">
+              {user ? 'Panel' : 'Kirish'} <ArrowRight className="size-4" />
             </Link>
-            <button onClick={() => setMenuOpen((v) => !v)} className="rounded-lg p-2 text-slate-600 lg:hidden" aria-label="Menyu">
+            <button onClick={() => setMenuOpen((v) => !v)} className="rounded-xl border border-slate-200 p-2 text-slate-600 transition hover:bg-slate-50 lg:hidden" aria-label="Menyu">
               {menuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
             </button>
           </div>
@@ -129,7 +129,7 @@ export function LandingPage() {
         {menuOpen && (
           <nav className="flex flex-col gap-1 border-t border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 lg:hidden">
             <NavLinks onClick={() => setMenuOpen(false)} className="rounded-lg px-3 py-2 hover:bg-slate-50" />
-            <a href={AGENT_INSTALLER} download onClick={() => setMenuOpen(false)} className="mt-1 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-brand-700 hover:bg-brand-50">
+            <a href={AGENT_INSTALLER} download onClick={() => setMenuOpen(false)} className="mt-1 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-brand-600 hover:bg-brand-50">
               <Download className="size-4" /> Agentni yuklab olish (EXE)
             </a>
           </nav>
@@ -137,42 +137,40 @@ export function LandingPage() {
       </header>
 
       {/* ---------- Hero ---------- */}
-      <section className="relative overflow-hidden">
-        <div className="pointer-events-none absolute -left-40 -top-24 size-[40rem] rounded-full bg-brand-500/20 blur-3xl" />
-        <div className="pointer-events-none absolute -right-40 top-40 size-[34rem] rounded-full bg-accent-500/20 blur-3xl" />
+      <section className="mesh-light relative overflow-hidden">
         <div className="relative mx-auto grid max-w-7xl items-center gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:gap-10 lg:px-8 lg:py-28">
           <div>
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
-              <ShieldCheck className="size-3.5 text-brand-400" /> Enterprise · Windows · Shaffof monitoring
+            <span className="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700">
+              <ShieldCheck className="size-3.5" /> Enterprise · Windows · Shaffof monitoring
             </span>
-            <h1 className="mt-6 text-4xl font-bold leading-[1.08] tracking-tight text-white sm:text-5xl lg:text-6xl">
+            <h1 className="mt-6 text-4xl font-bold leading-[1.08] tracking-tight text-slate-900 sm:text-5xl lg:text-6xl">
               Korporativ kompyuterlarni <span className="brand-text">markazdan boshqaring</span>
             </h1>
-            <p className="mt-6 max-w-xl text-lg leading-relaxed text-slate-400">
+            <p className="mt-6 max-w-xl text-lg leading-relaxed text-slate-600">
               KOSHI — xodimlarga biriktirilgan Windows kompyuterlarни monitoring qilish, dastur siyosatlarini qo‘llash va mehnat unumdorligini ishonchli tahlil qilish uchun yagona, shaffof platforma. Agent, server va panel — hammasi haqiqiy kod bilan bog‘langan.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-              <a href={AGENT_INSTALLER} download className="brand-gradient inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3.5 font-semibold text-white shadow-lg shadow-brand-600/30 transition hover:brightness-110">
+              <a href={AGENT_INSTALLER} download className="brand-gradient inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3.5 font-semibold text-white shadow-xl shadow-brand-600/25 transition hover:brightness-110">
                 <Download className="size-5" /> Agentni yuklab olish (EXE)
               </a>
-              <Link to={cta.to} className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-6 py-3.5 font-medium text-slate-100 transition hover:bg-white/10">
+              <Link to={cta.to} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-6 py-3.5 font-medium text-slate-800 transition hover:border-brand-300 hover:bg-brand-50">
                 {cta.label} <ArrowRight className="size-4" />
               </Link>
             </div>
             <dl className="mt-10 grid max-w-xl grid-cols-2 gap-3 sm:grid-cols-4">
               {stats.map(([v, k]) => (
-                <div key={k} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-center">
+                <div key={k} className="rounded-2xl border border-slate-200 bg-white p-3 text-center shadow-sm">
                   <dt className="brand-text text-xl font-bold">{v}</dt>
-                  <dd className="mt-1 text-[11px] leading-tight text-slate-400">{k}</dd>
+                  <dd className="mt-1 text-[11px] leading-tight text-slate-500">{k}</dd>
                 </div>
               ))}
             </dl>
           </div>
           <div className="relative">
-            <div className="absolute inset-0 rounded-[2.5rem] bg-gradient-to-br from-brand-500/30 to-accent-500/30 blur-2xl" />
-            <div className="relative rounded-[2.5rem] border border-white/10 bg-white/[0.03] p-8 backdrop-blur sm:p-10">
+            <div className="absolute inset-0 rounded-[2.5rem] bg-gradient-to-br from-brand-500/20 to-accent-500/20 blur-2xl" />
+            <div className="relative rounded-[2.5rem] border border-slate-200 bg-white p-8 shadow-2xl shadow-brand-900/10 sm:p-10">
               <div className="flex justify-center">
-                <KoshiIcon className="size-36 drop-shadow-[0_20px_45px_rgba(47,128,255,0.45)] sm:size-44" />
+                <KoshiIcon className="size-36 drop-shadow-[0_20px_45px_rgba(99,102,241,0.35)] sm:size-44" />
               </div>
               <div className="mt-8 grid grid-cols-3 gap-3 text-center">
                 {[
@@ -182,10 +180,10 @@ export function LandingPage() {
                 ].map(([Ic, k, v]) => {
                   const I = Ic as Icon
                   return (
-                    <div key={k as string} className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                      <I className="mx-auto size-5 text-brand-400" />
-                      <p className="mt-2 text-[11px] text-slate-400">{k as string}</p>
-                      <p className="text-sm font-semibold text-white">{v as string}</p>
+                    <div key={k as string} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                      <I className="mx-auto size-5 text-brand-600" />
+                      <p className="mt-2 text-[11px] text-slate-500">{k as string}</p>
+                      <p className="text-sm font-semibold text-slate-900">{v as string}</p>
                     </div>
                   )
                 })}
@@ -198,40 +196,40 @@ export function LandingPage() {
       {/* ---------- Features ---------- */}
       <section id="features" className="mx-auto max-w-7xl scroll-mt-20 px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
         <div className="mx-auto max-w-2xl text-center">
-          <p className="text-sm font-semibold uppercase tracking-wider text-brand-400">Imkoniyatlar</p>
-          <h2 className="mt-3 text-3xl font-bold text-white sm:text-4xl">Bitta platformada hammasi</h2>
-          <p className="mt-4 text-slate-400">Admin panelidagi har bir tugma haqiqiy API va Windows mexanizmlariga bog‘langan — maketlar emas, ishlaydigan funksiyalar.</p>
+          <p className="text-sm font-semibold uppercase tracking-wider text-brand-600">Imkoniyatlar</p>
+          <h2 className="mt-3 text-3xl font-bold text-slate-900 sm:text-4xl">Bitta platformada hammasi</h2>
+          <p className="mt-4 text-slate-600">Admin panelidagi har bir tugma haqiqiy API va Windows mexanizmlariga bog‘langan — maketlar emas, ishlaydigan funksiyalar.</p>
         </div>
         <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {features.map(({ icon: Icon, title, text }) => (
-            <div key={title} className="group rounded-3xl border border-white/10 bg-white/[0.03] p-6 transition hover:-translate-y-1 hover:border-brand-500/40 hover:bg-white/[0.06]">
+            <div key={title} className="group rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:border-brand-300 hover:shadow-xl hover:shadow-brand-900/5">
               <span className="brand-gradient inline-flex rounded-2xl p-3 text-white shadow-lg shadow-brand-600/20">
                 <Icon className="size-5" />
               </span>
-              <h3 className="mt-5 text-lg font-semibold text-white">{title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-400">{text}</p>
+              <h3 className="mt-5 text-lg font-semibold text-slate-900">{title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-slate-600">{text}</p>
             </div>
           ))}
         </div>
       </section>
 
       {/* ---------- Modules ---------- */}
-      <section id="modules" className="scroll-mt-20 border-y border-white/5 bg-white/[0.02]">
+      <section id="modules" className="scroll-mt-20 border-y border-slate-200 bg-slate-50">
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
           <div className="mx-auto max-w-2xl text-center">
-            <p className="text-sm font-semibold uppercase tracking-wider text-brand-400">Admin panel</p>
-            <h2 className="mt-3 text-3xl font-bold text-white sm:text-4xl">13 ta boshqaruv bo‘limi</h2>
-            <p className="mt-4 text-slate-400">Har bir bo‘lim rol va ruxsatlarga qarab ko‘rinadi. Ma’lumot doirasi bo‘lim darajasida cheklanishi mumkin.</p>
+            <p className="text-sm font-semibold uppercase tracking-wider text-brand-600">Admin panel</p>
+            <h2 className="mt-3 text-3xl font-bold text-slate-900 sm:text-4xl">13 ta boshqaruv bo‘limi</h2>
+            <p className="mt-4 text-slate-600">Har bir bo‘lim rol va ruxsatlarga qarab ko‘rinadi. Ma’lumot doirasi bo‘lim darajasida cheklanishi mumkin.</p>
           </div>
           <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {modules.map(({ icon: Icon, name, text }) => (
-              <div key={name} className="flex gap-3 rounded-2xl border border-white/10 bg-ink-900 p-5">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-500/10 text-brand-400">
+              <div key={name} className="flex gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-brand-300 hover:shadow-md">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
                   <Icon className="size-5" />
                 </span>
                 <div>
-                  <h3 className="font-semibold text-white">{name}</h3>
-                  <p className="mt-1 text-xs leading-relaxed text-slate-400">{text}</p>
+                  <h3 className="font-semibold text-slate-900">{name}</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-slate-600">{text}</p>
                 </div>
               </div>
             ))}
@@ -240,101 +238,105 @@ export function LandingPage() {
       </section>
 
       {/* ---------- How it works ---------- */}
-      <section id="how" className="mx-auto max-w-7xl scroll-mt-20 px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
-        <div className="mx-auto max-w-2xl text-center">
-          <p className="text-sm font-semibold uppercase tracking-wider text-brand-400">Jarayon</p>
-          <h2 className="mt-3 text-3xl font-bold text-white sm:text-4xl">Qanday ishlaydi</h2>
-          <p className="mt-4 text-slate-400">Uch qadam: o‘rnatish, serverga ulanish, paneldan boshqarish.</p>
-        </div>
-        <div className="mt-14 grid gap-6 md:grid-cols-3">
-          {steps.map(({ n, icon: Icon, title, text }) => (
-            <div key={n} className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] p-7">
-              <Workflow className="pointer-events-none absolute -right-4 -top-4 size-24 text-white/[0.04]" />
-              <div className="flex items-center gap-3">
-                <span className="brand-gradient inline-flex rounded-2xl p-3 text-white shadow-lg shadow-brand-600/20">
-                  <Icon className="size-5" />
-                </span>
-                <span className="brand-text text-4xl font-bold">{n}</span>
+      <section id="how" className="scroll-mt-20 bg-white">
+        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
+          <div className="mx-auto max-w-2xl text-center">
+            <p className="text-sm font-semibold uppercase tracking-wider text-brand-600">Jarayon</p>
+            <h2 className="mt-3 text-3xl font-bold text-slate-900 sm:text-4xl">Qanday ishlaydi</h2>
+            <p className="mt-4 text-slate-600">Uch qadam: o‘rnatish, serverga ulanish, paneldan boshqarish.</p>
+          </div>
+          <div className="mt-14 grid gap-6 md:grid-cols-3">
+            {steps.map(({ n, icon: Icon, title, text }) => (
+              <div key={n} className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-7 shadow-sm transition hover:-translate-y-1 hover:border-brand-300 hover:shadow-xl hover:shadow-brand-900/5">
+                <Workflow className="pointer-events-none absolute -right-4 -top-4 size-24 text-slate-100" />
+                <div className="relative flex items-center gap-3">
+                  <span className="brand-gradient inline-flex rounded-2xl p-3 text-white shadow-lg shadow-brand-600/25">
+                    <Icon className="size-5" />
+                  </span>
+                  <span className="brand-text text-4xl font-bold">{n}</span>
+                </div>
+                <h3 className="relative mt-5 text-lg font-semibold text-slate-900">{title}</h3>
+                <p className="relative mt-2 text-sm leading-relaxed text-slate-600">{text}</p>
               </div>
-              <h3 className="mt-5 text-lg font-semibold text-white">{title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-400">{text}</p>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </section>
 
       {/* ---------- Security ---------- */}
-      <section id="privacy" className="scroll-mt-20 border-y border-white/5 bg-white/[0.02]">
+      <section id="privacy" className="scroll-mt-20 bg-white">
         <div className="mx-auto grid max-w-7xl items-center gap-12 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:px-8 lg:py-24">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-wider text-brand-400">Xavfsizlik va maxfiylik</p>
-            <h2 className="mt-3 text-3xl font-bold text-white sm:text-4xl">Shaffof, qonuniy va himoyalangan</h2>
-            <p className="mt-4 text-slate-400">
+            <p className="text-sm font-semibold uppercase tracking-wider text-brand-600">Xavfsizlik va maxfiylik</p>
+            <h2 className="mt-3 text-3xl font-bold text-slate-900 sm:text-4xl">Shaffof, qonuniy va himoyalangan</h2>
+            <p className="mt-4 text-slate-600">
               KOSHI faqat tashkilotga tegishli qurilmalarda, ichki siyosatга muvofiq ishlaydi. Monitoring xodimga oshkor — yashirin kuzatuv, keylogger, mikrofon yoki kamera josusligi funksiyalari yo‘q.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
-              <span className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300"><Lock className="size-4 text-brand-400" /> TLS shifrlash</span>
-              <span className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300"><ShieldCheck className="size-4 text-brand-400" /> RBAC server tomonida</span>
-              <span className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300"><FileSearch className="size-4 text-brand-400" /> To‘liq audit</span>
+              <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700"><Lock className="size-4 text-brand-600" /> TLS shifrlash</span>
+              <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700"><ShieldCheck className="size-4 text-brand-600" /> RBAC server tomonida</span>
+              <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700"><FileSearch className="size-4 text-brand-600" /> To‘liq audit</span>
             </div>
           </div>
           <ul className="space-y-3">
             {principles.map((p) => (
-              <li key={p} className="flex items-start gap-3 rounded-2xl border border-white/5 bg-white/[0.03] p-4 text-sm text-slate-200">
-                <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-brand-400" /> {p}
+              <li key={p} className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-brand-600" /> {p}
               </li>
             ))}
           </ul>
         </div>
       </section>
 
-      {/* ---------- Download ---------- */}
-      <section id="download" className="mx-auto max-w-7xl scroll-mt-20 px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
-        <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-gradient-to-br from-brand-600/20 via-ink-900 to-accent-600/20 p-8 text-center sm:p-14">
-          <div className="pointer-events-none absolute -right-20 -top-24 size-72 rounded-full bg-brand-500/20 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-24 -left-20 size-72 rounded-full bg-accent-500/20 blur-3xl" />
-          <span className="brand-gradient relative mx-auto inline-flex rounded-2xl p-3.5 text-white shadow-lg shadow-brand-600/30">
-            <Download className="size-7" />
-          </span>
-          <h2 className="relative mt-5 text-3xl font-bold text-white sm:text-4xl">KOSHI Agentni yuklab oling</h2>
-          <p className="relative mx-auto mt-4 max-w-2xl text-slate-300">
-            Windows uchun o‘rnatuvchi (EXE). Administrator sifatida o‘rnatiladi, bir martalik aktivatsiya kodi bilan serverga ulanadi va kompyuter admin panelda paydo bo‘ladi. Keyingi versiyalar avtomatik yangilanadi.
-          </p>
-          <div className="relative mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <a href={AGENT_INSTALLER} download className="brand-gradient inline-flex w-full items-center justify-center gap-2 rounded-xl px-7 py-4 text-base font-semibold text-white shadow-lg shadow-brand-600/30 transition hover:brightness-110 sm:w-auto">
-              <Download className="size-5" /> Windows uchun yuklab olish
-            </a>
-            <span className="text-xs text-slate-400">{releaseLabel}</span>
-          </div>
-          <div className="relative mx-auto mt-8 grid max-w-3xl gap-3 text-left sm:grid-cols-3">
-            {([
-              [MonitorSmartphone, 'Administrator sifatida o‘rnating'],
-              [Clock, 'Aktivatsiya kodini kiriting'],
-              [CheckCircle2, 'Panelda onlayn ko‘rinadi'],
-            ] as [Icon, string][]).map(([Icon, label], i) => (
-              <div key={i} className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm text-slate-200">
-                <Icon className="size-5 shrink-0 text-brand-400" /> {label}
-              </div>
-            ))}
+      {/* ---------- Download (dark band) ---------- */}
+      <section id="download" className="scroll-mt-20 bg-slate-50">
+        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
+          <div className="relative overflow-hidden rounded-[2rem] bg-ink-950 p-8 text-center shadow-2xl sm:p-14">
+            <div className="pointer-events-none absolute -right-20 -top-24 size-72 rounded-full bg-brand-500/25 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-24 -left-20 size-72 rounded-full bg-accent-500/25 blur-3xl" />
+            <span className="brand-gradient relative mx-auto inline-flex rounded-2xl p-3.5 text-white shadow-lg shadow-brand-600/30">
+              <Download className="size-7" />
+            </span>
+            <h2 className="relative mt-5 text-3xl font-bold text-white sm:text-4xl">KOSHI Agentni yuklab oling</h2>
+            <p className="relative mx-auto mt-4 max-w-2xl text-slate-300">
+              Windows uchun o‘rnatuvchi (EXE). Administrator sifatida o‘rnatiladi, bir martalik aktivatsiya kodi bilan serverga ulanadi va kompyuter admin panelda paydo bo‘ladi. Keyingi versiyalar avtomatik yangilanadi.
+            </p>
+            <div className="relative mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <a href={AGENT_INSTALLER} download className="brand-gradient inline-flex w-full items-center justify-center gap-2 rounded-xl px-7 py-4 text-base font-semibold text-white shadow-lg shadow-brand-600/30 transition hover:brightness-110 sm:w-auto">
+                <Download className="size-5" /> Windows uchun yuklab olish
+              </a>
+              <span className="text-xs text-slate-400">{releaseLabel}</span>
+            </div>
+            <div className="relative mx-auto mt-8 grid max-w-3xl gap-3 text-left sm:grid-cols-3">
+              {([
+                [MonitorSmartphone, 'Administrator sifatida o‘rnating'],
+                [Clock, 'Aktivatsiya kodini kiriting'],
+                [CheckCircle2, 'Panelda onlayn ko‘rinadi'],
+              ] as [Icon, string][]).map(([Icon, label], i) => (
+                <div key={i} className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3 text-sm text-slate-200">
+                  <Icon className="size-5 shrink-0 text-brand-400" /> {label}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
       {/* ---------- FAQ ---------- */}
-      <section id="faq" className="scroll-mt-20 border-t border-white/5 bg-white/[0.02]">
+      <section id="faq" className="scroll-mt-20 bg-white">
         <div className="mx-auto max-w-4xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
           <div className="mx-auto max-w-2xl text-center">
-            <p className="text-sm font-semibold uppercase tracking-wider text-brand-400">Savol-javob</p>
-            <h2 className="mt-3 text-3xl font-bold text-white sm:text-4xl">Ko‘p beriladigan savollar</h2>
+            <p className="text-sm font-semibold uppercase tracking-wider text-brand-600">Savol-javob</p>
+            <h2 className="mt-3 text-3xl font-bold text-slate-900 sm:text-4xl">Ko‘p beriladigan savollar</h2>
           </div>
           <div className="mt-12 space-y-3">
             {faqs.map(([q, a]) => (
-              <details key={q} className="group rounded-2xl border border-white/10 bg-ink-900 p-5 [&_summary]:cursor-pointer">
-                <summary className="flex items-center justify-between gap-4 text-base font-semibold text-white marker:content-['']">
+              <details key={q} className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm [&_summary]:cursor-pointer">
+                <summary className="flex items-center justify-between gap-4 text-base font-semibold text-slate-900 marker:content-['']">
                   {q}
-                  <ArrowRight className="size-4 shrink-0 text-brand-400 transition group-open:rotate-90" />
+                  <ArrowRight className="size-4 shrink-0 text-brand-600 transition group-open:rotate-90" />
                 </summary>
-                <p className="mt-3 text-sm leading-relaxed text-slate-400">{a}</p>
+                <p className="mt-3 text-sm leading-relaxed text-slate-600">{a}</p>
               </details>
             ))}
           </div>
@@ -342,23 +344,25 @@ export function LandingPage() {
       </section>
 
       {/* ---------- CTA ---------- */}
-      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
-        <div className="flex flex-col items-center gap-5 rounded-[2rem] border border-white/10 bg-gradient-to-br from-ink-900 to-ink-950 p-10 text-center sm:p-14">
-          <h2 className="max-w-2xl text-3xl font-bold text-white sm:text-4xl">Tashkilotingiz kompyuterlarini bugun markazlashtiring</h2>
-          <p className="max-w-xl text-slate-400">Agentni o‘rnating, aktivatsiya qiling va bir necha daqiqada jonli monitoring, siyosatlar va hisobotlarni ko‘ring.</p>
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <a href={AGENT_INSTALLER} download className="brand-gradient inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3.5 font-semibold text-white shadow-lg shadow-brand-600/30 transition hover:brightness-110">
-              <Download className="size-5" /> Agentni yuklab olish
-            </a>
-            <Link to={cta.to} className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-6 py-3.5 font-medium text-slate-100 transition hover:bg-white/10">
-              {cta.label} <ArrowRight className="size-4" />
-            </Link>
+      <section className="bg-white">
+        <div className="mx-auto max-w-7xl px-4 pb-16 sm:px-6 lg:px-8">
+          <div className="brand-gradient relative flex flex-col items-center gap-5 overflow-hidden rounded-[2rem] p-10 text-center text-white shadow-2xl shadow-brand-900/20 sm:p-14">
+            <h2 className="max-w-2xl text-3xl font-bold sm:text-4xl">Tashkilotingiz kompyuterlarini bugun markazlashtiring</h2>
+            <p className="max-w-xl text-white/85">Agentni o‘rnating, aktivatsiya qiling va bir necha daqiqada jonli monitoring, siyosatlar va hisobotlarni ko‘ring.</p>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <a href={AGENT_INSTALLER} download className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-6 py-3.5 font-semibold text-brand-700 shadow-lg transition hover:bg-slate-50">
+                <Download className="size-5" /> Agentni yuklab olish
+              </a>
+              <Link to={cta.to} className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/40 px-6 py-3.5 font-medium text-white transition hover:bg-white/10">
+                {cta.label} <ArrowRight className="size-4" />
+              </Link>
+            </div>
           </div>
         </div>
       </section>
 
       {/* ---------- Footer ---------- */}
-      <footer className="border-t border-white/5">
+      <footer className="bg-ink-950 text-slate-300">
         <div className="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-4 lg:px-8">
           <div className="lg:col-span-2">
             <KoshiIcon className="size-9" />
@@ -383,7 +387,7 @@ export function LandingPage() {
             </ul>
           </div>
         </div>
-        <div className="border-t border-white/5">
+        <div className="border-t border-white/10">
           <div className="mx-auto max-w-7xl px-4 py-6 text-center text-xs text-slate-500 sm:px-6 lg:px-8">
             © {new Date().getFullYear()} KOSHI Monitoring Platform · Barcha administrator amallari audit jurnaliga yoziladi
           </div>
