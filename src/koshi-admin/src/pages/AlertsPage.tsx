@@ -29,7 +29,7 @@ export function AlertsPage() {
 
   return (
     <>
-      <PageHeader title="Alerts" subtitle="Aloqa uzilishi, siyosat xatolari, cheklov buzilishlari va xavfsizlik hodisalari" />
+      <PageHeader title="Ogohlantirishlar" subtitle="Aloqa uzilishi, siyosat xatolari, cheklov buzilishlari va xavfsizlik hodisalari" />
       <Card>
         <CardHeader
           title="Ogohlantirishlar"

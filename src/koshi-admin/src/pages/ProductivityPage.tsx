@@ -22,7 +22,7 @@ export function ProductivityPage() {
   return (
     <>
       <PageHeader
-        title="Productivity"
+        title="Unumdorlik"
         subtitle="KPI, faol vaqt, tanaffuslar va tendensiyalar — ishonchlilik darajasi bilan"
         actions={
           <Field label="Guruhlash">

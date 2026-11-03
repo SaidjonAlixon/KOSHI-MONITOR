@@ -134,7 +134,7 @@ export function ApplicationsPage() {
 
   return (
     <>
-      <PageHeader title="App Management" subtitle="Ruxsat berilgan va taqiqlangan dasturlar, foydalanish limitlari va tasnif" />
+      <PageHeader title="Dasturlar boshqaruvi" subtitle="Ruxsat berilgan va taqiqlangan dasturlar, foydalanish limitlari va tasnif" />
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader

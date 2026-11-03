@@ -31,7 +31,7 @@ export function LivePage() {
   return (
     <>
       <PageHeader
-        title="Live Monitoring"
+        title="Jonli kuzatuv"
         subtitle="Faol dastur, faol oyna (policy ruxsat bergan holda, maskalangan), davomiylik va agent aloqasi"
         actions={
           <span className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-medium ${realtime === 'connected' ? 'border-emerald-200 text-emerald-700 dark:border-emerald-500/30 dark:text-emerald-300' : 'border-amber-200 text-amber-700 dark:border-amber-500/30 dark:text-amber-300'}`}>

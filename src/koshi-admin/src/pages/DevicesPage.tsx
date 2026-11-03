@@ -283,7 +283,7 @@ export function DevicesPage() {
                               <ShieldOff className="size-4 text-rose-500" />
                             </Button>
                           )}
-                          <Button variant="ghost" title="Qurilmani o‘chirish" onClick={() => confirm(`${d.displayName} ro‘yxatdan o‘chirilsinmi? Agent uzilади va qurilma ro‘yxatdan yo‘qoladi (tarix saqlanadi).`) && remove.mutate(d.id)}>
+                          <Button variant="ghost" title="Qurilmani o‘chirish" onClick={() => confirm(`${d.displayName} ro‘yxatdan o‘chirilsinmi? Agent uziladi va qurilma ro‘yxatdan yo‘qoladi (tarix saqlanadi).`) && remove.mutate(d.id)}>
                             <Trash2 className="size-4 text-rose-500" />
                           </Button>
                         </div>

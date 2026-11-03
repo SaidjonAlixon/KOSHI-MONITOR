@@ -18,9 +18,9 @@ export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
   {
     title: 'Umumiy',
     items: [
-      { to: '/app', label: 'Dashboard', icon: LayoutDashboard, permission: Permissions.DashboardRead },
-      { to: '/app/live', label: 'Live Monitoring', icon: Activity, permission: Permissions.MonitoringLive },
-      { to: '/app/timeline', label: 'Activity Timeline', icon: History, permission: Permissions.MonitoringRead },
+      { to: '/app', label: 'Boshqaruv paneli', icon: LayoutDashboard, permission: Permissions.DashboardRead },
+      { to: '/app/live', label: 'Jonli kuzatuv', icon: Activity, permission: Permissions.MonitoringLive },
+      { to: '/app/timeline', label: 'Faoliyat tarixi', icon: History, permission: Permissions.MonitoringRead },
     ],
   },
   {
@@ -28,24 +28,24 @@ export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { to: '/app/employees', label: 'Xodimlar', icon: Users, permission: Permissions.EmployeesRead },
       { to: '/app/devices', label: 'Qurilmalar', icon: Monitor, permission: Permissions.DevicesRead },
-      { to: '/app/applications', label: 'App Management', icon: AppWindow, permission: Permissions.PoliciesRead },
-      { to: '/app/policies', label: 'Policies', icon: ShieldCheck, permission: Permissions.PoliciesRead },
+      { to: '/app/applications', label: 'Dasturlar boshqaruvi', icon: AppWindow, permission: Permissions.PoliciesRead },
+      { to: '/app/policies', label: 'Siyosatlar', icon: ShieldCheck, permission: Permissions.PoliciesRead },
     ],
   },
   {
     title: 'Tahlil',
     items: [
-      { to: '/app/productivity', label: 'Productivity', icon: BarChart3, permission: Permissions.ReportsRead },
-      { to: '/app/reports', label: 'Reports', icon: FileSpreadsheet, permission: Permissions.ReportsRead },
+      { to: '/app/productivity', label: 'Unumdorlik', icon: BarChart3, permission: Permissions.ReportsRead },
+      { to: '/app/reports', label: 'Hisobotlar', icon: FileSpreadsheet, permission: Permissions.ReportsRead },
     ],
   },
   {
     title: 'Xavfsizlik',
     items: [
-      { to: '/app/alerts', label: 'Alerts', icon: Bell, permission: Permissions.AlertsRead },
-      { to: '/app/audit', label: 'Audit Logs', icon: FileText, permission: Permissions.AuditRead },
-      { to: '/app/users', label: 'Roles & Permissions', icon: UserCog, permission: Permissions.UsersManage },
-      { to: '/app/settings', label: 'Settings', icon: Settings, permission: Permissions.SettingsRead },
+      { to: '/app/alerts', label: 'Ogohlantirishlar', icon: Bell, permission: Permissions.AlertsRead },
+      { to: '/app/audit', label: 'Audit jurnali', icon: FileText, permission: Permissions.AuditRead },
+      { to: '/app/users', label: 'Rollar va ruxsatlar', icon: UserCog, permission: Permissions.UsersManage },
+      { to: '/app/settings', label: 'Sozlamalar', icon: Settings, permission: Permissions.SettingsRead },
     ],
   },
 ]
@@ -70,7 +70,7 @@ function SidebarNav({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?
         if (items.length === 0) return null
         return (
           <div key={group.title}>
-            {!collapsed && <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">{group.title}</p>}
+            {!collapsed && <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">{group.title}</p>}
             <div className="space-y-1">
               {items.map(({ to, label, icon: Icon }) => (
                 <NavLink
@@ -80,15 +80,17 @@ function SidebarNav({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?
                   title={label}
                   onClick={onNavigate}
                   className={({ isActive }) =>
-                    `group relative flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition ${
-                      isActive ? 'bg-white/10 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                    `group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+                      isActive
+                        ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-white'
                     }`
                   }
                 >
                   {({ isActive }) => (
                     <>
-                      {isActive && <span className="brand-gradient absolute inset-y-1.5 left-0 w-1 rounded-full" />}
-                      <Icon className={`size-[18px] shrink-0 ${isActive ? 'text-brand-400' : 'text-slate-500 group-hover:text-slate-300'}`} />
+                      {isActive && <span className="brand-gradient absolute inset-y-2 left-0 w-1 rounded-full" />}
+                      <Icon className={`size-[18px] shrink-0 ${isActive ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300'}`} />
                       {!collapsed && <span className="truncate">{label}</span>}
                     </>
                   )}

@@ -33,7 +33,7 @@ export function AuditPage() {
 
   return (
     <>
-      <PageHeader title="Audit Logs" subtitle="Kim, qachon, qaysi qurilmada va qanday amalni bajargani. Jurnal faqat o‘qish uchun." />
+      <PageHeader title="Audit jurnali" subtitle="Kim, qachon, qaysi qurilmada va qanday amalni bajargani. Jurnal faqat o‘qish uchun." />
       <div className="grid gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 sm:grid-cols-4 dark:border-white/10 dark:bg-ink-900">
         <Field label="Amal (prefiks)">
           <Input placeholder="device., policy., auth.login" value={action} onChange={(e) => (setAction(e.target.value), setPage(1))} />

@@ -31,18 +31,18 @@ const features: { icon: Icon; title: string; text: string }[] = [
 ]
 
 const modules: { icon: Icon; name: string; text: string }[] = [
-  { icon: LayoutDashboard, name: 'Dashboard', text: 'Qurilmalar, onlayn holat, bugungi monitoring vaqti va KPI bir ekranda.' },
-  { icon: Activity, name: 'Live Monitoring', text: 'Real vaqtda faol dastur, oyna va agent holati.' },
-  { icon: History, name: 'Activity Timeline', text: 'Kun davomida dasturlar, idle va to‘xtatilgan holatlar tarixi.' },
+  { icon: LayoutDashboard, name: 'Boshqaruv paneli', text: 'Qurilmalar, onlayn holat, bugungi monitoring vaqti va KPI bir ekranda.' },
+  { icon: Activity, name: 'Jonli kuzatuv', text: 'Real vaqtda faol dastur, oyna va agent holati.' },
+  { icon: History, name: 'Faoliyat tarixi', text: 'Kun davomida dasturlar, bo‘sh va to‘xtatilgan holatlar tarixi.' },
   { icon: Users, name: 'Xodimlar', text: 'Xodimlar, bo‘limlar, filiallar va lavozimlar boshqaruvi.' },
   { icon: MonitorSmartphone, name: 'Qurilmalar', text: 'Agent holati, aktivatsiya, bloklash, masofaviy boshqaruv.' },
-  { icon: AppWindow, name: 'App Management', text: 'Ruxsat/taqiq qoidalari, kunlik limitlar, tasnif.' },
-  { icon: ShieldCheck, name: 'Policies', text: 'Monitoring jadvali, cheklovlar, versiyalash va rollback.' },
-  { icon: Gauge, name: 'Productivity', text: 'KPI, faol vaqt, tanaffuslar va tendensiyalar.' },
-  { icon: FileSpreadsheet, name: 'Reports', text: 'Kunlik, haftalik, oylik hisobotlar va CSV eksport.' },
-  { icon: Bell, name: 'Alerts', text: 'Aloqa, siyosat va xavfsizlik hodisalari.' },
-  { icon: FileSearch, name: 'Audit Logs', text: 'Administrator amallarining to‘liq jurnali.' },
-  { icon: Settings, name: 'Settings', text: 'Saqlash muddati, formula, ish jadvallari va bildirishnomalar.' },
+  { icon: AppWindow, name: 'Dasturlar boshqaruvi', text: 'Ruxsat/taqiq qoidalari, kunlik limitlar, tasnif.' },
+  { icon: ShieldCheck, name: 'Siyosatlar', text: 'Monitoring jadvali, cheklovlar, versiyalash va orqaga qaytarish.' },
+  { icon: Gauge, name: 'Unumdorlik', text: 'KPI, faol vaqt, tanaffuslar va tendensiyalar.' },
+  { icon: FileSpreadsheet, name: 'Hisobotlar', text: 'Kunlik, haftalik, oylik hisobotlar va CSV eksport.' },
+  { icon: Bell, name: 'Ogohlantirishlar', text: 'Aloqa, siyosat va xavfsizlik hodisalari.' },
+  { icon: FileSearch, name: 'Audit jurnali', text: 'Administrator amallarining to‘liq jurnali.' },
+  { icon: Settings, name: 'Sozlamalar', text: 'Saqlash muddati, formula, ish jadvallari va bildirishnomalar.' },
 ]
 
 const steps: { n: string; icon: Icon; title: string; text: string }[] = [
@@ -64,7 +64,7 @@ const faqs: [string, string][] = [
   ['Xodim monitoring borligini biladimi?', 'Ha. Agent har doim ko‘rinadigan tray indikatori va monitoring siyosati xabari bilan ishlaydi. Yashirin kuzatuv funksiyalari yo‘q.'],
   ['Qanday ma’lumot yig‘iladi?', 'Faol dastur nomi, faol/bo‘sh vaqt va (siyosat ruxsat bersa) maskalangan oyna sarlavhasi. Shaxsiy matn, parol, ovoz yoki video yig‘ilmaydi.'],
   ['Windows Home’da ishlaydimi?', 'Monitoring ishlaydi. Lekin dasturlarni haqiqiy bloklash (AppLocker) faqat Windows Enterprise/Education’da ishlaydi; boshqa nashrlarda natija “Unsupported” deb qayd etiladi.'],
-  ['Aloqa uzilsa ma’lumot yo‘qoladimi?', 'Yo‘q. Agent ma’lumotni lokal navbatda saqlaydi va aloqa tiklanганда idempotency-key bilan takrorsiz yuboradi.'],
+  ['Aloqa uzilsa ma’lumot yo‘qoladimi?', 'Yo‘q. Agent ma’lumotni lokal navbatda saqlaydi va aloqa tiklanganda idempotency-key bilan takrorsiz yuboradi.'],
   ['Yangilanish qanday bo‘ladi?', 'Administrator ruxsat bersa, agent yangi versiyani o‘zi yuklab, SHA-256 bilan tekshirib, jim o‘rnatadi. Aktivatsiya saqlanadi.'],
 ]
 
@@ -75,7 +75,7 @@ function NavLinks({ onClick, className = '' }: { onClick?: () => void; className
       <a href="#modules" onClick={onClick} className={className}>Bo‘limlar</a>
       <a href="#how" onClick={onClick} className={className}>Qanday ishlaydi</a>
       <a href="#download" onClick={onClick} className={className}>Yuklab olish</a>
-      <a href="#faq" onClick={onClick} className={className}>FAQ</a>
+      <a href="#faq" onClick={onClick} className={className}>Savollar</a>
     </>
   )
 }
@@ -147,7 +147,7 @@ export function LandingPage() {
               Korporativ kompyuterlarni <span className="brand-text">markazdan boshqaring</span>
             </h1>
             <p className="mt-6 max-w-xl text-lg leading-relaxed text-slate-600">
-              KOSHI — xodimlarga biriktirilgan Windows kompyuterlarни monitoring qilish, dastur siyosatlarini qo‘llash va mehnat unumdorligini ishonchli tahlil qilish uchun yagona, shaffof platforma. Agent, server va panel — hammasi haqiqiy kod bilan bog‘langan.
+              KOSHI — xodimlarga biriktirilgan Windows kompyuterlarni monitoring qilish, dastur siyosatlarini qo‘llash va mehnat unumdorligini ishonchli tahlil qilish uchun yagona, shaffof platforma. Agent, server va panel — hammasi haqiqiy kod bilan bog‘langan.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <a href={AGENT_INSTALLER} download className="brand-gradient inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3.5 font-semibold text-white shadow-xl shadow-brand-600/25 transition hover:brightness-110">
@@ -270,7 +270,7 @@ export function LandingPage() {
             <p className="text-sm font-semibold uppercase tracking-wider text-brand-600">Xavfsizlik va maxfiylik</p>
             <h2 className="mt-3 text-3xl font-bold text-slate-900 sm:text-4xl">Shaffof, qonuniy va himoyalangan</h2>
             <p className="mt-4 text-slate-600">
-              KOSHI faqat tashkilotga tegishli qurilmalarda, ichki siyosatга muvofiq ishlaydi. Monitoring xodimga oshkor — yashirin kuzatuv, keylogger, mikrofon yoki kamera josusligi funksiyalari yo‘q.
+              KOSHI faqat tashkilotga tegishli qurilmalarda, ichki siyosatga muvofiq ishlaydi. Monitoring xodimga oshkor — yashirin kuzatuv, keylogger, mikrofon yoki kamera josusligi funksiyalari yo‘q.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <span className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700"><Lock className="size-4 text-brand-600" /> TLS shifrlash</span>

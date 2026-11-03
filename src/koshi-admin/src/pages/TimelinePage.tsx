@@ -19,7 +19,7 @@ export function TimelinePage() {
 
   return (
     <>
-      <PageHeader title="Activity Timeline" subtitle="Kun davomida dasturlar, idle va to‘xtatilgan holatlar tarixi" />
+      <PageHeader title="Faoliyat tarixi" subtitle="Kun davomida dasturlar, bo‘sh va to‘xtatilgan holatlar tarixi" />
       <FilterBar value={filters} onChange={(f) => (setFilters(f), setPage(1))} />
       <Card>
         <CardHeader title="Hodisalar" subtitle={q.data ? `${q.data.total} ta yozuv` : undefined} />

@@ -31,7 +31,7 @@ export function ReportsPage() {
   return (
     <>
       <PageHeader
-        title="Reports"
+        title="Hisobotlar"
         subtitle="Kunlik, haftalik va oylik hisobotlar. CSV fayl Excel’da ochiladi; PDF uchun “Chop etish → PDF sifatida saqlash”."
         actions={
           <>

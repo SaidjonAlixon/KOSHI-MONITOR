@@ -247,7 +247,7 @@ export function UsersPage() {
   return (
     <>
       <PageHeader
-        title="Roles & Permissions"
+        title="Rollar va ruxsatlar"
         subtitle="Administratorlar, ularning rollari va har bir rolga beriladigan ruxsatlar"
         actions={tab === 'users' && (
           <Button onClick={() => setEditing('new')}>

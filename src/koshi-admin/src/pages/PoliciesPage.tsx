@@ -230,7 +230,7 @@ export function PoliciesPage() {
   return (
     <>
       <PageHeader
-        title="Policies"
+        title="Siyosatlar"
         subtitle="Monitoring jadvali, sarlavha siyosati, cheklovlar, versiyalash va favqulodda rollback"
         actions={manage && (
           <Button onClick={() => setEditing('new')}>

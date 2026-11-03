@@ -103,7 +103,7 @@ export function SettingsPage() {
   return (
     <>
       <PageHeader
-        title="Settings"
+        title="Sozlamalar"
         subtitle="Saqlash muddatlari, bildirishnomalar, monitoring xabari va unumdorlik formulasi"
         actions={editable && (
           <Button onClick={() => save.mutate(form)} loading={save.isPending}>
