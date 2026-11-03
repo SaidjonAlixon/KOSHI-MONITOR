@@ -59,6 +59,14 @@ public sealed class DevicesController(DeviceService devices, PolicyService polic
     [Authorize(Policy = Permissions.DevicesManage)]
     public async Task<ActionResult<DeviceDto>> Revoke(Guid id, CancellationToken ct) => Ok(await devices.RevokeAsync(id, ct));
 
+    [HttpDelete("{id:guid}")]
+    [Authorize(Policy = Permissions.DevicesManage)]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        await devices.DeleteAsync(id, ct);
+        return NoContent();
+    }
+
     [HttpGet("{id:guid}/status")]
     [Authorize(Policy = Permissions.DevicesRead)]
     public async Task<ActionResult<DeviceStatusDto>> Status(Guid id, CancellationToken ct) => Ok(await devices.StatusAsync(id, ct));

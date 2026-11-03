@@ -327,6 +327,28 @@ public sealed class DeviceService(
         return rows.Select(c => new DeviceConnectionDto(c.ConnectedAt, c.DisconnectedAt, c.DurationSeconds)).ToList();
     }
 
+    /// <summary>Soft-deletes a device: revokes credentials, invalidates codes and hides it from lists. History is kept for reports/audit.</summary>
+    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        var device = await db.Devices.FirstOrDefaultAsync(d => d.Id == id && d.DeletedAt == null, ct) ?? throw Errors.NotFound("Device");
+        var now = Now;
+        var credentials = await db.DeviceCredentials.Where(c => c.DeviceId == id && c.RevokedAt == null).ToListAsync(ct);
+        foreach (var c in credentials) c.RevokedAt = now;
+        var codes = await db.DeviceActivations.Where(a => a.DeviceId == id && a.UsedAt == null && a.InvalidatedAt == null).ToListAsync(ct);
+        foreach (var a in codes) a.InvalidatedAt = now;
+        device.Status = DeviceStatus.Revoked;
+        device.DeletedAt = now;
+        device.MonitoringEnabled = false;
+        device.ConnectedAt = null;
+        device.CurrentProcessName = null;
+        device.CurrentWindowTitle = null;
+        device.CurrentState = null;
+        device.UpdatedAt = now;
+        audit.Record("device.delete", "Device", id, new { device.DisplayName, device.Hostname, revokedCredentials = credentials.Count });
+        await db.SaveChangesAsync(ct);
+        logger.LogInformation("Device {DeviceId} deleted (soft)", id);
+    }
+
     public async Task<DeviceStatusDto> StatusAsync(Guid id, CancellationToken ct = default)
     {
         var s = await settings.GetAsync(ct);

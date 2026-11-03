@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Ban, Copy, Download, History, KeyRound, MonitorPlay, Pencil, Plus, RotateCcw, ShieldOff } from 'lucide-react'
+import { Ban, Copy, Download, History, KeyRound, MonitorPlay, Pencil, Plus, RotateCcw, ShieldOff, Trash2 } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { Field, Input, Modal, PageHeader, Pagination, Select, SortHeader, tableClass, tbodyClass, td, th, theadClass, useEmployeesLookup, type SortState } from '@/components/forms'
@@ -122,6 +122,11 @@ export function DevicesPage() {
       if (vars.op === 'activation-code') setCode(result as ActivationCode)
       qc.invalidateQueries({ queryKey: ['devices'] })
     },
+  })
+
+  const remove = useMutation({
+    mutationFn: (id: string) => api(`/api/devices/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['devices'] }),
   })
 
   const setFilter = (key: string, value: string) => {
@@ -278,6 +283,9 @@ export function DevicesPage() {
                               <ShieldOff className="size-4 text-rose-500" />
                             </Button>
                           )}
+                          <Button variant="ghost" title="Qurilmani o‘chirish" onClick={() => confirm(`${d.displayName} ro‘yxatdan o‘chirilsinmi? Agent uzilади va qurilma ro‘yxatdan yo‘qoladi (tarix saqlanadi).`) && remove.mutate(d.id)}>
+                            <Trash2 className="size-4 text-rose-500" />
+                          </Button>
                         </div>
                       </td>
                     )}
