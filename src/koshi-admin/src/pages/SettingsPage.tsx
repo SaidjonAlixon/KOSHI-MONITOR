@@ -74,6 +74,12 @@ function ScheduleForm({ schedule, onDone }: { schedule: WorkSchedule | null; onD
   )
 }
 
+function bumpPatch(version: string): string {
+  const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(version.trim())
+  if (!m) return version
+  return `${m[1]}.${m[2]}.${Number(m[3]) + 1}`
+}
+
 function AgentReleaseManager({ editable }: { editable: boolean }) {
   const qc = useQueryClient()
   const current = useQuery({ queryKey: ['agent-release'], queryFn: () => api<AgentRelease | null>('/api/agent/release') })
@@ -111,15 +117,36 @@ function AgentReleaseManager({ editable }: { editable: boolean }) {
   })
 
   const rel = current.data
+  const nextVersion = rel ? bumpPatch(rel.version) : '1.0.0'
   return (
     <div className="rounded-xl border border-slate-200 p-4 dark:border-white/10">
-      <p className="text-sm font-medium">Yangi versiya chiqarish</p>
-      <p className="mt-1 text-xs text-slate-500">
-        Joriy versiya: {rel ? `${rel.version} · ${rel.buildDate} · ${(rel.size / 1_048_576).toFixed(0)} MB (${rel.source === 'uploaded' ? 'admin yuklagan' : 'tizim'})` : 'hali chiqarilmagan'}
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium">Agentning joriy (serverdagi) versiyasi</p>
+          <p className="mt-1 text-xs text-slate-500">Barcha kompyuterlardagi agentlar shu versiyaga yangilanadi</p>
+        </div>
+        {current.isPending ? (
+          <span className="text-xs text-slate-400">Yuklanmoqda…</span>
+        ) : rel ? (
+          <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 dark:border-emerald-500/20 dark:bg-emerald-500/10">
+            <span className="size-2 rounded-full bg-emerald-500" />
+            <div className="text-right">
+              <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">v{rel.version}</p>
+              <p className="text-[11px] text-emerald-600/80 dark:text-emerald-400/80">
+                {rel.buildDate} · {(rel.size / 1_048_576).toFixed(0)} MB · {rel.source === 'uploaded' ? 'admin yuklagan' : 'tizim'}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <span className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-xs font-medium text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+            Hali chiqarilmagan
+          </span>
+        )}
+      </div>
+
       {editable && (
         <form
-          className="mt-3 flex flex-wrap items-end gap-3"
+          className="mt-4 flex flex-wrap items-end gap-3 border-t border-slate-100 pt-4 dark:border-white/5"
           onSubmit={(e) => {
             e.preventDefault()
             setError(null)
@@ -127,19 +154,22 @@ function AgentReleaseManager({ editable }: { editable: boolean }) {
             publish.mutate()
           }}
         >
-          <Field label="Versiya (X.Y.Z)">
-            <Input value={version} onChange={(e) => setVersion(e.target.value)} placeholder="1.0.6" pattern="^\d+\.\d+\.\d+$" required className="w-32" />
+          <Field label="Yangi versiya (X.Y.Z)" hint={rel ? `Joriy: ${rel.version} — keyingisi ${nextVersion}` : undefined}>
+            <Input value={version} onChange={(e) => setVersion(e.target.value)} placeholder={nextVersion} pattern="^\d+\.\d+\.\d+$" required className="w-40" />
           </Field>
           <Field label="Installer (EXE)">
             <Input type="file" accept=".exe,application/octet-stream" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required className="w-72" />
           </Field>
+          <Button type="button" variant="secondary" onClick={() => setVersion(nextVersion)}>
+            {nextVersion} ni qo‘yish
+          </Button>
           <Button type="submit" loading={publish.isPending} disabled={!file || !version}>
             <Upload className="size-4" /> Chiqarish
           </Button>
         </form>
       )}
       {error && <p className="mt-2 text-xs text-rose-600">{error}</p>}
-      {ok && <p className="mt-2 text-xs text-emerald-600">Yangi versiya chiqarildi. Agentlar avtomatik yangilanadi (ruxsat yoqilgan bo‘lsa).</p>}
+      {ok && <p className="mt-2 text-xs text-emerald-600">Yangi versiya chiqarildi. Agentlarga “Yangilash” bildirishnomasi boradi (ruxsat yoqilgan bo‘lsa).</p>}
     </div>
   )
 }
