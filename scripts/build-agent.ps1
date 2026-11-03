@@ -18,7 +18,9 @@ $iscc = @(
 if (-not $iscc) { throw "Inno Setup 6 not found. Install with: winget install JRSoftware.InnoSetup" }
 
 Remove-Item -Recurse -Force artifacts\agent, artifacts\service -ErrorAction SilentlyContinue
-$common = @("-c", "Release", "-r", "win-x64", "--self-contained", "true", "-p:Version=$Version", "-p:DebugType=none", "-nologo")
+$buildDate = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd')
+$infoVersion = "$Version+$((Get-Date).ToUniversalTime().ToString('yyyyMMdd'))"
+$common = @("-c", "Release", "-r", "win-x64", "--self-contained", "true", "-p:Version=$Version", "-p:InformationalVersion=$infoVersion", "-p:DebugType=none", "-nologo")
 
 Write-Host "Publishing tray agent..."
 dotnet publish src\KOSHI.Agent @common -o artifacts\agent
@@ -37,5 +39,15 @@ Write-Host "Compiling installer..."
 if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
 
 $setup = Get-Item "artifacts\installer\KOSHI-Agent-Setup-$Version.exe"
+$sha = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash
+# Metadata served next to the installer so the site can show the exact version and build date.
+[ordered]@{
+    version   = $Version
+    buildDate = $buildDate
+    fileName  = $setup.Name
+    size      = $setup.Length
+    sha256    = $sha
+} | ConvertTo-Json | Set-Content -Encoding UTF8 "artifacts\installer\latest.json"
 Write-Host ("Installer: {0} ({1:N1} MB)" -f $setup.FullName, ($setup.Length / 1MB))
-Write-Host ("SHA256: {0}" -f (Get-FileHash $setup.FullName -Algorithm SHA256).Hash)
+Write-Host ("Version: {0}  BuildDate: {1}" -f $Version, $buildDate)
+Write-Host ("SHA256: {0}" -f $sha)

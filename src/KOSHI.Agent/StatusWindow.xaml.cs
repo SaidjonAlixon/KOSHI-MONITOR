@@ -14,7 +14,7 @@ public partial class StatusWindow : Window
     public StatusWindow()
     {
         InitializeComponent();
-        VersionText.Text = AgentInfo.Version;
+        VersionText.Text = AgentInfo.VersionWithDate;
     }
 
     public void Render(AgentStatus s)

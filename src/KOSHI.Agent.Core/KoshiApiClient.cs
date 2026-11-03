@@ -90,4 +90,21 @@ public sealed class KoshiApiClient : IDisposable
 public static class AgentInfo
 {
     public static string Version => typeof(AgentInfo).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
+
+    /// <summary>Build date (yyyy-MM-dd) embedded as the metadata part of the informational version, e.g. "1.0.3+20261103".</summary>
+    public static string BuildDate
+    {
+        get
+        {
+            var info = System.Reflection.CustomAttributeExtensions
+                .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(AgentInfo).Assembly)?.InformationalVersion ?? string.Empty;
+            var plus = info.IndexOf('+');
+            if (plus >= 0 && DateTime.TryParseExact(new string(info[(plus + 1)..].Where(char.IsDigit).ToArray()).PadRight(8).TrimEnd(),
+                    "yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var d))
+                return d.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+            return string.Empty;
+        }
+    }
+
+    public static string VersionWithDate => string.IsNullOrEmpty(BuildDate) ? Version : $"{Version} ({BuildDate})";
 }

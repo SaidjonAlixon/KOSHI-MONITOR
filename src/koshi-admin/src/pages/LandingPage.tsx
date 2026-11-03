@@ -49,14 +49,28 @@ function NavLinks({ onClick, className = '' }: { onClick?: () => void; className
   )
 }
 
+interface AgentRelease {
+  version: string
+  buildDate: string
+  fileName: string
+  size: number
+}
+
 export function LandingPage() {
   const { user } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [release, setRelease] = useState<AgentRelease | null>(null)
   const cta = user ? { to: '/app', label: 'Admin panelga o‘tish' } : { to: '/login', label: 'Admin panelga kirish' }
 
   useEffect(() => {
     document.documentElement.classList.remove('dark')
+    fetch('/downloads/latest.json', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((r: AgentRelease | null) => setRelease(r))
+      .catch(() => setRelease(null))
   }, [])
+
+  const releaseLabel = release ? `Versiya ${release.version} · ${release.buildDate} · ${(release.size / 1_048_576).toFixed(0)} MB` : 'Windows 10/11 · 64-bit'
 
   return (
     <div className="min-h-full scroll-smooth bg-ink-950 text-slate-200">
@@ -200,7 +214,7 @@ export function LandingPage() {
             <a href={AGENT_INSTALLER} download className="brand-gradient inline-flex w-full items-center justify-center gap-2 rounded-xl px-7 py-4 text-base font-semibold text-white shadow-lg shadow-brand-600/30 transition hover:brightness-110 sm:w-auto">
               <Download className="size-5" /> Windows uchun yuklab olish
             </a>
-            <span className="text-xs text-slate-400">Windows 10/11 · 64-bit · ~77 MB</span>
+            <span className="text-xs text-slate-400">{releaseLabel}</span>
           </div>
           <div className="relative mx-auto mt-8 grid max-w-3xl gap-3 text-left sm:grid-cols-3">
             {[
