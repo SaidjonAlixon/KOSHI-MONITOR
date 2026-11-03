@@ -32,7 +32,7 @@ public sealed class SettingsService(IKoshiDbContext db, AuditWriter audit, ICurr
         AuditRetentionDays: 365,
         OfflineThresholdSeconds: 120,
         OrganizationTimeZone: "Asia/Tashkent",
-        MonitoringNotice: "Bu korporativ kompyuter tashkilot siyosatiga muvofiq KOSHI orqali monitoring qilinadi: faol dastur nomi, faol/bo'sh vaqt va (siyosat ruxsat bersa) maskalangan oyna sarlavhasi. Klaviatura bosishlari, parollar, clipboard, kamera, mikrofon va shaxsiy xabarlar yig'ilmaydi.",
+        MonitoringNotice: "Bu korporativ kompyuter tashkilot siyosatiga muvofiq KOSHI orqali monitoring qilinadi. Klaviatura, parol, clipboard, kamera va mikrofon yig'ilmaydi.",
         SupportContact: "IT yordam: it-support@example.com",
         ApprovedUsageWeight: 0.5,
         ScheduleAdherenceWeight: 0.3,

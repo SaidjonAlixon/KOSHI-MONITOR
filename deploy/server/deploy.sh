@@ -19,11 +19,14 @@ fi
 
 install -d -m 755 "$ROOT"
 install -d -o koshi -g koshi -m 750 "$ROOT/logs"
+install -d -o koshi -g koshi -m 750 "$ROOT/releases"
 rm -rf "$STAGE" && install -d "$STAGE"
 tar -xzf "$RELEASE" -C "$STAGE"
 
 [[ -n "$(tail -c1 "$ENV_FILE")" ]] && echo >> "$ENV_FILE"
 grep -q '^KOSHI_Database__ApplyMigrationsOnStartup=' "$ENV_FILE" || echo 'KOSHI_Database__ApplyMigrationsOnStartup=true' >> "$ENV_FILE"
+grep -q '^KOSHI_AgentReleases__Path=' "$ENV_FILE" || echo 'KOSHI_AgentReleases__Path=/opt/koshi/releases' >> "$ENV_FILE"
+grep -q '^KOSHI_AgentReleases__SeedInstaller=' "$ENV_FILE" || echo 'KOSHI_AgentReleases__SeedInstaller=/opt/koshi/admin/downloads/KOSHI-Agent-Setup.exe' >> "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 
 # Keep the previous release for rollback.

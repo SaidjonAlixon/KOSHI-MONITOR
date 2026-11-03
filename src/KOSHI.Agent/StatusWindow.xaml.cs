@@ -39,6 +39,8 @@ public partial class StatusWindow : Window
         MonitoringText.Text = s.MonitoringActive ? "Yoqilgan" : "To'xtatilgan";
         PolicyText.Text = s.PolicyName is null ? "standart" : $"{s.PolicyName} (v{s.PolicyVersion})";
         SyncText.Text = s.LastSync?.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss") ?? "—";
+        AutoUpdateText.Text = s.AutoUpdateEnabled ? "Yoqilgan — yangi versiya o‘zi o‘rnatiladi" : "O‘chirilgan";
+        AutoUpdateText.Foreground = Brush(s.AutoUpdateEnabled ? "#047857" : "#64748B");
         NoticeText.Text = s.MonitoringNotice;
         SupportText.Text = s.SupportContact;
         ActivateButton.Visibility = s.State is AgentState.NotActivated or AgentState.Revoked ? Visibility.Visible : Visibility.Collapsed;

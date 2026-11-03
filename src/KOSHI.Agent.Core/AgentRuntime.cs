@@ -19,7 +19,8 @@ public sealed record AgentStatus(
     DateTime? LastSync,
     string MonitoringNotice,
     string SupportContact,
-    bool RemoteChannelConnected);
+    bool RemoteChannelConnected,
+    bool AutoUpdateEnabled);
 
 /// <summary>Runs inside the interactive user session: sampling, local queue, upload, heartbeat, policy and remote channel.</summary>
 [SupportedOSPlatform("windows")]
@@ -50,10 +51,10 @@ public sealed class AgentRuntime : IAsyncDisposable
         _source = source;
         _remoteHost = remoteHost;
         _logger = logger;
-        Status = new AgentStatus(AgentState.NotActivated, null, null, false, null, null, 0, null, DefaultNotice, "IT bo'limi", false);
+        Status = new AgentStatus(AgentState.NotActivated, null, null, false, null, null, 0, null, DefaultNotice, "IT bo'limi", false, true);
     }
 
-    public const string DefaultNotice = "Bu korporativ kompyuter tashkilot siyosatiga muvofiq KOSHI orqali monitoring qilinadi. Klaviatura bosishlari, parollar, clipboard, kamera va mikrofon yig'ilmaydi.";
+    public const string DefaultNotice = "Bu korporativ kompyuter tashkilot siyosatiga muvofiq KOSHI orqali monitoring qilinadi.";
 
     public AgentStatus Status { get; private set; }
 
@@ -211,7 +212,7 @@ public sealed class AgentRuntime : IAsyncDisposable
         var p = await _api!.GetPolicyAsync(ct);
         _policy = p;
         lock (_gate) _tracker.Settings = new TrackerSettings(p.IdleThresholdSeconds, p.WindowTitleCapture);
-        SetStatus(s => s with { PolicyName = p.Name, PolicyVersion = p.Version, MonitoringNotice = p.MonitoringNotice, SupportContact = p.SupportContact });
+        SetStatus(s => s with { PolicyName = p.Name, PolicyVersion = p.Version, MonitoringNotice = p.MonitoringNotice, SupportContact = p.SupportContact, AutoUpdateEnabled = p.AutoUpdateEnabled });
     }
 
     private async Task HeartbeatLoop(CancellationToken ct)

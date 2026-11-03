@@ -186,6 +186,7 @@ using (var scope = app.Services.CreateScope())
     await scope.ServiceProvider.GetRequiredService<DatabaseInitializer>().InitializeAsync();
     await KOSHI.Application.Services.RoleService.ReloadCacheAsync(
         scope.ServiceProvider.GetRequiredService<KoshiDbContext>(), app.Services.GetRequiredService<RolePermissionCache>());
+    await scope.ServiceProvider.GetRequiredService<KOSHI.Infrastructure.Agent.AgentReleaseService>().EnsureSeededAsync();
 }
 
 await app.RunAsync();

@@ -1,5 +1,5 @@
-/** Served by nginx from /opt/koshi/admin/downloads (copied there by the release build). */
-export const AGENT_INSTALLER = '/downloads/KOSHI-Agent-Setup.exe'
+/** Served by the API from the admin-managed release store (falls back to the bundled installer). */
+export const AGENT_INSTALLER = '/api/agent/release/download'
 
 export const PERMISSION_LABELS: Record<string, string> = {
   'dashboard.read': 'Dashboardni ko‘rish',

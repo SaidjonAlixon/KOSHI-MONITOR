@@ -50,7 +50,9 @@ public sealed class AgentUpdateWorker(ILogger<AgentUpdateWorker> logger) : Backg
 
         var baseUri = new Uri(config.ServerUrl.TrimEnd('/') + "/");
         using var http = new HttpClient { BaseAddress = baseUri, Timeout = TimeSpan.FromMinutes(10) };
-        var release = await http.GetFromJsonSafeAsync<ReleaseInfo>("downloads/latest.json", ct);
+        // Prefer the admin-managed release API; fall back to the statically deployed file.
+        var release = await http.GetFromJsonSafeAsync<ReleaseInfo>("api/agent/release/latest.json", ct)
+                      ?? await http.GetFromJsonSafeAsync<ReleaseInfo>("downloads/latest.json", ct);
         if (release is null || string.IsNullOrWhiteSpace(release.Version)) return;
 
         if (!Version.TryParse(release.Version, out var latest) || !Version.TryParse(AgentInfo.Version, out var current)) return;
@@ -64,10 +66,24 @@ public sealed class AgentUpdateWorker(ILogger<AgentUpdateWorker> logger) : Backg
 
         logger.LogInformation("New agent version {Latest} available (current {Current}); downloading", latest, current);
         var temp = Path.Combine(Path.GetTempPath(), $"KOSHI-Agent-Setup-{release.Version}.exe");
-        var fileName = Path.GetFileName(release.FileName);
-        if (string.IsNullOrWhiteSpace(fileName) || !fileName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) return;
 
-        using (var resp = await http.GetAsync($"downloads/{Uri.EscapeDataString(fileName)}", HttpCompletionOption.ResponseHeadersRead, ct))
+        // Download from the release API, falling back to the static file by name.
+        HttpResponseMessage resp;
+        try
+        {
+            resp = await http.GetAsync("api/agent/release/download", HttpCompletionOption.ResponseHeadersRead, ct);
+            if (!resp.IsSuccessStatusCode)
+            {
+                resp.Dispose();
+                var fileName = Path.GetFileName(release.FileName);
+                resp = await http.GetAsync($"downloads/{Uri.EscapeDataString(fileName)}", HttpCompletionOption.ResponseHeadersRead, ct);
+            }
+        }
+        catch (HttpRequestException)
+        {
+            return;
+        }
+        using (resp)
         {
             resp.EnsureSuccessStatusCode();
             await using var fs = File.Create(temp);

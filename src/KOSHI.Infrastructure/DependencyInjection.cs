@@ -32,6 +32,8 @@ public static class DependencyInjection
         services.AddSingleton<IPasswordHasher>(new Pbkdf2PasswordHasher(iterations));
         services.AddSingleton<IDbErrorClassifier, PostgresErrorClassifier>();
 
+        services.AddSingleton(config.GetSection(Agent.AgentReleaseOptions.Section).Get<Agent.AgentReleaseOptions>() ?? new Agent.AgentReleaseOptions());
+        services.AddScoped<Agent.AgentReleaseService>();
         services.AddSingleton(config.GetSection(DatabaseOptions.Section).Get<DatabaseOptions>() ?? new DatabaseOptions());
         services.AddSingleton(config.GetSection(BootstrapOptions.Section).Get<BootstrapOptions>() ?? new BootstrapOptions());
         services.AddScoped<DatabaseInitializer>();

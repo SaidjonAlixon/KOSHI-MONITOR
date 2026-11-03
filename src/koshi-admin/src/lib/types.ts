@@ -306,6 +306,16 @@ export interface PermissionInfo {
   assignable: boolean
 }
 
+export interface AgentRelease {
+  version: string
+  buildDate: string
+  fileName: string
+  size: number
+  sha256: string
+  updatedAt: string
+  source: string
+}
+
 export interface SystemSettings {
   telemetryRetentionDays: number
   heartbeatRetentionDays: number

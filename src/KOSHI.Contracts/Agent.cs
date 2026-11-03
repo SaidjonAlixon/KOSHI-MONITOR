@@ -139,6 +139,15 @@ public sealed record AgentPolicyDto(
     string MonitoringNotice,
     string SupportContact);
 
+public sealed record AgentReleaseDto(
+    string Version,
+    string BuildDate,
+    string FileName,
+    long Size,
+    string Sha256,
+    DateTime UpdatedAt,
+    string Source);
+
 public sealed record AgentApplicationRuleDto(
     Guid Id,
     string Name,

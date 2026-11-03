@@ -95,7 +95,7 @@ export function LandingPage() {
 
   useEffect(() => {
     document.documentElement.classList.remove('dark')
-    fetch('/downloads/latest.json', { cache: 'no-store' })
+    fetch('/api/agent/release/latest.json', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((r: AgentRelease | null) => setRelease(r))
       .catch(() => setRelease(null))

@@ -1,12 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarClock, Plus, Save } from 'lucide-react'
+import { CalendarClock, Plus, Save, Upload } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Checkbox, Field, Input, Modal, PageHeader, Textarea } from '@/components/forms'
 import { Badge, Button, Card, CardHeader, ErrorState, LoadingState } from '@/components/ui'
-import { api } from '@/lib/api'
+import { ApiError, api, getAccessToken } from '@/lib/api'
 import { Permissions, useAuth } from '@/lib/auth'
 import { WEEKDAYS } from '@/lib/labels'
-import type { SystemSettings, Weekday, WorkSchedule } from '@/lib/types'
+import type { AgentRelease, SystemSettings, Weekday, WorkSchedule } from '@/lib/types'
 
 function ScheduleForm({ schedule, onDone }: { schedule: WorkSchedule | null; onDone: () => void }) {
   const qc = useQueryClient()
@@ -74,6 +74,76 @@ function ScheduleForm({ schedule, onDone }: { schedule: WorkSchedule | null; onD
   )
 }
 
+function AgentReleaseManager({ editable }: { editable: boolean }) {
+  const qc = useQueryClient()
+  const current = useQuery({ queryKey: ['agent-release'], queryFn: () => api<AgentRelease | null>('/api/agent/release') })
+  const [version, setVersion] = useState('')
+  const [file, setFile] = useState<File | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [ok, setOk] = useState(false)
+
+  const publish = useMutation({
+    mutationFn: async () => {
+      if (!file) throw new ApiError(400, 'validation_failed', 'EXE faylni tanlang.')
+      const fd = new FormData()
+      fd.set('version', version.trim())
+      fd.set('file', file)
+      const token = getAccessToken()
+      const res = await fetch('/api/agent/release', {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}`, 'X-KOSHI-Client': 'admin' } : {},
+        body: fd,
+        credentials: 'same-origin',
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new ApiError(res.status, body.code ?? 'error', body.title ?? 'Yuklab bo‘lmadi', body.errors ?? {})
+      }
+      return (await res.json()) as AgentRelease
+    },
+    onSuccess: () => {
+      setOk(true)
+      setFile(null)
+      setVersion('')
+      qc.invalidateQueries({ queryKey: ['agent-release'] })
+    },
+    onError: (e) => setError(e instanceof ApiError ? [e.message, ...Object.values(e.errors).flat()].join(' ') : 'Xatolik'),
+  })
+
+  const rel = current.data
+  return (
+    <div className="rounded-xl border border-slate-200 p-4 dark:border-white/10">
+      <p className="text-sm font-medium">Yangi versiya chiqarish</p>
+      <p className="mt-1 text-xs text-slate-500">
+        Joriy versiya: {rel ? `${rel.version} · ${rel.buildDate} · ${(rel.size / 1_048_576).toFixed(0)} MB (${rel.source === 'uploaded' ? 'admin yuklagan' : 'tizim'})` : 'hali chiqarilmagan'}
+      </p>
+      {editable && (
+        <form
+          className="mt-3 flex flex-wrap items-end gap-3"
+          onSubmit={(e) => {
+            e.preventDefault()
+            setError(null)
+            setOk(false)
+            publish.mutate()
+          }}
+        >
+          <Field label="Versiya (X.Y.Z)">
+            <Input value={version} onChange={(e) => setVersion(e.target.value)} placeholder="1.0.6" pattern="^\d+\.\d+\.\d+$" required className="w-32" />
+          </Field>
+          <Field label="Installer (EXE)">
+            <Input type="file" accept=".exe,application/octet-stream" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required className="w-72" />
+          </Field>
+          <Button type="submit" loading={publish.isPending} disabled={!file || !version}>
+            <Upload className="size-4" /> Chiqarish
+          </Button>
+        </form>
+      )}
+      {error && <p className="mt-2 text-xs text-rose-600">{error}</p>}
+      {ok && <p className="mt-2 text-xs text-emerald-600">Yangi versiya chiqarildi. Agentlar avtomatik yangilanadi (ruxsat yoqilgan bo‘lsa).</p>}
+    </div>
+  )
+}
+
 export function SettingsPage() {
   const { can } = useAuth()
   const qc = useQueryClient()
@@ -136,8 +206,8 @@ export function SettingsPage() {
           </div>
         </Card>
         <Card className="xl:col-span-2">
-          <CardHeader title="Agent yangilanishi" subtitle="Yangi versiya chiqqanda ishlab turgan agent uni o‘zi yuklab o‘rnatadi" />
-          <div className="p-5">
+          <CardHeader title="Agent yangilanishi" subtitle="Yangi versiya chiqarsangiz, ishlab turgan agentlar uni o‘zi yuklab o‘rnatadi" />
+          <div className="space-y-5 p-5">
             <Checkbox
               label={
                 <span>
@@ -149,6 +219,7 @@ export function SettingsPage() {
               checked={form.agentAutoUpdate}
               onChange={(e) => set({ agentAutoUpdate: e.target.checked })}
             />
+            <AgentReleaseManager editable={editable} />
           </div>
         </Card>
         <Card className="xl:col-span-2">
