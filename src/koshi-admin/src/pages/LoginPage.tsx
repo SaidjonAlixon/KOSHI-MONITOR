@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Navigate, useLocation, useNavigate } from 'react-router'
 import { z } from 'zod'
-import { KoshiIcon, KoshiLogo } from '@/components/Brand'
+import { KoshiLogo } from '@/components/Brand'
 import { Button } from '@/components/ui'
 import { ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -48,8 +48,7 @@ export function LoginPage() {
       <div className="relative w-full max-w-md">
         <div className="rounded-3xl border border-white/10 bg-white p-8 shadow-2xl shadow-black/40 dark:bg-white">
           <div className="flex flex-col items-center text-center">
-            <KoshiIcon className="size-16" />
-            <KoshiLogo className="mt-4 h-9" />
+            <KoshiLogo className="h-12" />
             <p className="mt-3 text-sm text-slate-500">Korporativ kompyuterlar monitoringi va unumdorlik boshqaruvi</p>
           </div>
 
