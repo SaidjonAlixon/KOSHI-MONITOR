@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
-import { Radio } from 'lucide-react'
+import { MonitorPlay, Radio } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router'
+import { Permissions, useAuth } from '@/lib/auth'
 import { FilterBar, PageHeader, defaultFilters, tableClass, tbodyClass, td, th, theadClass, type Filters } from '@/components/forms'
 import { Badge, Card, CardHeader, EmptyState, ErrorState, LoadingState, formatDateTime, formatDuration } from '@/components/ui'
 import { api } from '@/lib/api'
@@ -11,6 +13,7 @@ const tone = { Online: 'green', Offline: 'gray', Paused: 'amber', Blocked: 'red'
 const label = { Online: 'Onlayn', Offline: 'Offlayn', Paused: 'To‘xtatilgan', Blocked: 'Bloklangan' } as const
 
 export function LivePage() {
+  const { can } = useAuth()
   const [filters, setFilters] = useState<Filters>(defaultFilters())
   const realtime = useMonitoringRealtime([['live']])
   const q = useQuery({
@@ -76,7 +79,16 @@ export function LivePage() {
                       {d.employeeName ?? <span className="text-slate-400">—</span>}
                       <p className="text-xs text-slate-500">{d.departmentName ?? ''}</p>
                     </td>
-                    <td className={`${td} font-medium`}>{d.deviceName}</td>
+                    <td className={`${td} font-medium`}>
+                      <span className="flex items-center gap-2">
+                        {d.deviceName}
+                        {can(Permissions.RemoteControl) && d.agentStatus === 'Online' && (
+                          <Link to={`/app/remote/${d.deviceId}`} title="Masofaviy boshqaruv" className="rounded-lg p-1 text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-500/10">
+                            <MonitorPlay className="size-4" />
+                          </Link>
+                        )}
+                      </span>
+                    </td>
                     <td className={`${td} font-mono text-xs`}>{d.currentProcessName ?? '—'}</td>
                     <td className={`${td} max-w-xs truncate text-xs text-slate-500`} title={d.currentWindowTitle ?? undefined}>
                       {d.currentWindowTitle ?? '—'}

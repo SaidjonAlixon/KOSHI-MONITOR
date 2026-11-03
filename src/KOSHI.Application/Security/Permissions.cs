@@ -28,6 +28,9 @@ public static class Permissions
     public const string SettingsRead = "settings.read";
     public const string SettingsManage = "settings.manage";
 
+    /// <summary>Remote screen control and remote commands (lock, message, restart...). Always visible to the employee and audited.</summary>
+    public const string RemoteControl = "remote.control";
+
     /// <summary>Holder can see all departments; others are restricted to User.DepartmentScopeId when set.</summary>
     public const string DataUnscoped = "data.unscoped";
 
@@ -38,7 +41,7 @@ public static class Permissions
     [
         DashboardRead, DevicesRead, DevicesManage, MonitoringRead, MonitoringLive, PoliciesRead, PoliciesManage,
         ReportsRead, ReportsIndividual, ReportsExport, EmployeesRead, EmployeesManage, AuditRead, AlertsRead,
-        AlertsManage, UsersManage, SettingsRead, SettingsManage, DataUnscoped, RolesManage,
+        AlertsManage, UsersManage, SettingsRead, SettingsManage, RemoteControl, DataUnscoped, RolesManage,
     ];
 
     public static readonly IReadOnlySet<string> NonAssignable = new HashSet<string>(StringComparer.Ordinal) { RolesManage };
@@ -53,7 +56,7 @@ public static class Permissions
             [
                 DashboardRead, DevicesRead, DevicesManage, MonitoringRead, MonitoringLive, PoliciesRead,
                 PoliciesManage, ReportsRead, ReportsIndividual, ReportsExport, EmployeesRead, AuditRead,
-                AlertsRead, AlertsManage, SettingsRead, DataUnscoped,
+                AlertsRead, AlertsManage, SettingsRead, RemoteControl, DataUnscoped,
             ],
             [RoleNames.HRManager] =
             [

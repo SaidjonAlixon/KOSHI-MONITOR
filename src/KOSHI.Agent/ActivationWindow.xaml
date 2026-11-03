@@ -1,0 +1,20 @@
+<Window x:Class="KOSHI.Agent.ActivationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="KOSHI — qurilmani aktivatsiya qilish"
+        Icon="pack://application:,,,/Assets/koshi.ico"
+        Width="420" SizeToContent="Height" ResizeMode="NoResize" WindowStartupLocation="CenterOwner" FontFamily="Segoe UI">
+    <StackPanel Margin="24">
+        <TextBlock Text="Server manzili" FontWeight="SemiBold" />
+        <TextBox x:Name="ServerBox" Margin="0,4,0,12" Padding="6" Text="https://koshi.uz" />
+        <TextBlock Text="Bir martalik aktivatsiya kodi" FontWeight="SemiBold" />
+        <TextBox x:Name="CodeBox" Margin="0,4,0,4" Padding="6" CharacterCasing="Upper" FontFamily="Consolas" FontSize="16" />
+        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#64748B"
+                   Text="Kodni administrator KOSHI panelidagi “Qurilmalar → Qurilma qo‘shish” bo‘limida beradi. Aktivatsiya administrator huquqini so‘raydi (UAC)." />
+        <TextBlock x:Name="ErrorText" Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#B91C1C" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Content="Bekor qilish" Padding="12,5" Margin="0,0,8,0" IsCancel="True" />
+            <Button x:Name="OkButton" Content="Aktivatsiya" Padding="12,5" IsDefault="True" Click="OnActivate" />
+        </StackPanel>
+    </StackPanel>
+</Window>

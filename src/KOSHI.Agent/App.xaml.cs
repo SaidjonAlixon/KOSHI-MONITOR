@@ -1,4 +1,9 @@
 ﻿using System.Windows;
+using KOSHI.Agent.Core;
+using KOSHI.Agent.Core.Windows;
+using KOSHI.Agent.Remote;
+using Microsoft.Extensions.Logging;
+using Serilog;
 using Forms = System.Windows.Forms;
 
 namespace KOSHI.Agent;
@@ -9,6 +14,8 @@ public partial class App : System.Windows.Application
     private Mutex? _mutex;
     private Forms.NotifyIcon? _tray;
     private StatusWindow? _window;
+    private AgentRuntime? _runtime;
+    private ILoggerFactory? _loggers;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -20,6 +27,17 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        // Logs contain technical events only (no window titles, no keystrokes).
+        Log.Logger = new LoggerConfiguration().MinimumLevel.Information()
+            .WriteTo.File(System.IO.Path.Combine(AgentPaths.UserLogDir, "agent-.log"), rollingInterval: RollingInterval.Day, retainedFileCountLimit: 14)
+            .CreateLogger();
+        _loggers = LoggerFactory.Create(b => b.AddSerilog(Log.Logger, dispose: false));
+        DispatcherUnhandledException += (_, args) =>
+        {
+            Log.Error(args.Exception, "Unhandled UI exception");
+            args.Handled = true;
+        };
+
         _window = new StatusWindow();
         _tray = new Forms.NotifyIcon
         {
@@ -29,18 +47,46 @@ public partial class App : System.Windows.Application
             ContextMenuStrip = BuildMenu(),
         };
         _tray.DoubleClick += (_, _) => ShowStatus();
-        ShowStatus();
+
+        AgentRuntime? runtime = null;
+        var host = new WindowsRemoteHost(() => runtime?.RefreshPolicyNowAsync() ?? Task.CompletedTask);
+        runtime = new AgentRuntime(new WindowsActivitySource(), host, _loggers.CreateLogger("KOSHI.Agent"));
+        _runtime = runtime;
+        _runtime.StatusChanged += s => Dispatcher.BeginInvoke(() => Render(s));
+        Render(_runtime.Status);
+        _runtime.Start();
+
+        if (AgentStore.LoadConfig() is null || e.Args.Contains("--show")) ShowStatus();
     }
 
-    protected override void OnExit(ExitEventArgs e)
+    protected override async void OnExit(ExitEventArgs e)
     {
+        if (_runtime is not null) await _runtime.DisposeAsync();
         if (_tray is not null)
         {
             _tray.Visible = false;
             _tray.Dispose();
         }
+        _loggers?.Dispose();
+        await Log.CloseAndFlushAsync();
         _mutex?.Dispose();
         base.OnExit(e);
+    }
+
+    private void Render(AgentStatus s)
+    {
+        _window?.Render(s);
+        if (_tray is null) return;
+        var text = s.State switch
+        {
+            AgentState.Online => "KOSHI — monitoring faol",
+            AgentState.Offline => "KOSHI — server bilan aloqa yo'q",
+            AgentState.Blocked => "KOSHI — qurilma bloklangan",
+            AgentState.Revoked => "KOSHI — kirish bekor qilingan",
+            AgentState.Connecting => "KOSHI — ulanmoqda",
+            _ => "KOSHI — aktivatsiya qilinmagan",
+        };
+        _tray.Text = text.Length > 63 ? text[..63] : text;
     }
 
     private Forms.ContextMenuStrip BuildMenu()

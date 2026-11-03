@@ -1,0 +1,34 @@
+[Unit]
+Description=KOSHI API (ASP.NET Core)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=koshi
+Group=koshi
+WorkingDirectory=/opt/koshi/api
+ExecStart=/opt/koshi/api/KOSHI.Api
+EnvironmentFile=/etc/koshi/koshi.env
+Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=30
+
+# Hardening: the API only needs network access and its own log directory.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/opt/koshi/logs
+MemoryMax=800M
+
+[Install]
+WantedBy=multi-user.target

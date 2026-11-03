@@ -1,11 +1,12 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Ban, Copy, KeyRound, Pencil, Plus, RotateCcw, ShieldOff } from 'lucide-react'
+import { Ban, Copy, Download, KeyRound, MonitorPlay, Pencil, Plus, RotateCcw, ShieldOff } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
-import { useSearchParams } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import { Field, Input, Modal, PageHeader, Pagination, Select, SortHeader, tableClass, tbodyClass, td, th, theadClass, useEmployeesLookup, type SortState } from '@/components/forms'
 import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, LoadingState, formatDateTime } from '@/components/ui'
 import { api } from '@/lib/api'
 import { Permissions, useAuth } from '@/lib/auth'
+import { AGENT_INSTALLER } from '@/lib/labels'
 import type { ActivationCode, Device, PagedResult } from '@/lib/types'
 
 const statusTone = { Active: 'green', Pending: 'blue', Blocked: 'red', Revoked: 'gray' } as const
@@ -102,9 +103,14 @@ export function DevicesPage() {
         title="Qurilmalar"
         subtitle="Ro‘yxatdan o‘tkazish, agent holati, oxirgi aloqa, bloklash va kirishni bekor qilish"
         actions={manage && (
-          <Button onClick={() => setEditing('new')}>
-            <Plus className="size-4" /> Qurilma qo‘shish
-          </Button>
+          <>
+            <a href={AGENT_INSTALLER} download className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
+              <Download className="size-4" /> Agent installer (EXE)
+            </a>
+            <Button onClick={() => setEditing('new')}>
+              <Plus className="size-4" /> Qurilma qo‘shish
+            </Button>
+          </>
         )}
       />
 
@@ -114,6 +120,9 @@ export function DevicesPage() {
             <div>
               <p className="text-sm font-semibold">Bir martalik aktivatsiya kodi</p>
               <p className="text-xs text-slate-500">Faqat hozir ko‘rsatiladi va bir marta ishlatiladi. Amal qilish muddati: {formatDateTime(code.expiresAt)}</p>
+              <p className="mt-1 text-xs text-slate-500">
+                Xodim kompyuterida <a href={AGENT_INSTALLER} className="text-brand-600 underline">KOSHI Agent installer</a>ni administrator sifatida ishga tushiring va shu kodni kiriting.
+              </p>
             </div>
             <div className="flex items-center gap-2">
               <code className="rounded-xl bg-white px-4 py-2 font-mono text-lg tracking-widest dark:bg-ink-950">{code.activationCode}</code>
@@ -175,8 +184,17 @@ export function DevicesPage() {
                 {q.data.items.map((d) => (
                   <tr key={d.id} className="hover:bg-slate-50/60 dark:hover:bg-white/[0.02]">
                     <td className={td}>
-                      <p className="font-medium">{d.displayName}</p>
-                      <p className="text-xs text-slate-500">{d.hostname ?? '—'}</p>
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <p className="font-medium">{d.displayName}</p>
+                          <p className="text-xs text-slate-500">{d.hostname ?? '—'}</p>
+                        </div>
+                        {can(Permissions.RemoteControl) && d.status === 'Active' && (
+                          <Link to={`/app/remote/${d.id}`} title="Masofaviy boshqaruv" className={`ml-auto rounded-lg p-1.5 ${d.isOnline ? 'text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-500/10' : 'pointer-events-none text-slate-300'}`}>
+                            <MonitorPlay className="size-4" />
+                          </Link>
+                        )}
+                      </div>
                     </td>
                     <td className={td}>
                       {d.employeeName ?? <span className="text-slate-400">biriktirilmagan</span>}

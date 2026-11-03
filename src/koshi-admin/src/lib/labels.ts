@@ -1,3 +1,6 @@
+/** Served by nginx from /opt/koshi/admin/downloads (copied there by the release build). */
+export const AGENT_INSTALLER = '/downloads/KOSHI-Agent-Setup.exe'
+
 export const PERMISSION_LABELS: Record<string, string> = {
   'dashboard.read': 'Dashboardni ko‘rish',
   'devices.read': 'Qurilmalarni ko‘rish',
@@ -17,6 +20,7 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'users.manage': 'Administratorlarni boshqarish',
   'settings.read': 'Sozlamalarni ko‘rish',
   'settings.manage': 'Sozlamalarni o‘zgartirish',
+  'remote.control': 'Masofaviy boshqaruv (ekran, buyruqlar)',
   'data.unscoped': 'Barcha bo‘limlar ma’lumotini ko‘rish',
   'roles.manage': 'Rollar va ruxsatlarni boshqarish (faqat Super Admin)',
 }
@@ -34,6 +38,7 @@ export const PERMISSION_GROUPS: Record<string, string> = {
   settings: 'Sozlamalar',
   data: 'Ma’lumot doirasi',
   roles: 'Rollar',
+  remote: 'Masofaviy boshqaruv',
 }
 
 export const CLASSIFICATION_LABELS = { Approved: 'Tasdiqlangan', NotApproved: 'Tasdiqlanmagan', Neutral: 'Neytral', Mixed: 'Aralash', Unclassified: 'Tasniflanmagan' } as const

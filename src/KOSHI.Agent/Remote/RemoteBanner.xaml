@@ -1,0 +1,26 @@
+<Window x:Class="KOSHI.Agent.Remote.RemoteBanner"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="KOSHI — masofaviy boshqaruv"
+        WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent"
+        Topmost="True" ShowInTaskbar="False" ShowActivated="False"
+        SizeToContent="WidthAndHeight" FontFamily="Segoe UI">
+    <Border CornerRadius="0,0,14,14" Padding="18,10" Background="#E11D48" BorderBrush="#FDA4AF" BorderThickness="1,0,1,1">
+        <StackPanel Orientation="Horizontal">
+            <Ellipse Width="10" Height="10" Fill="White" VerticalAlignment="Center">
+                <Ellipse.Triggers>
+                    <EventTrigger RoutedEvent="Loaded">
+                        <BeginStoryboard>
+                            <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity" From="1" To="0.2" Duration="0:0:0.8" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </EventTrigger>
+                </Ellipse.Triggers>
+            </Ellipse>
+            <TextBlock x:Name="Message" Margin="10,0,16,0" VerticalAlignment="Center" Foreground="White" FontWeight="SemiBold" FontSize="13" />
+            <Button x:Name="EndButton" Content="Sessiyani tugatish" Padding="12,4" Cursor="Hand" Click="OnEnd"
+                    Background="White" Foreground="#9F1239" BorderThickness="0" FontWeight="SemiBold" />
+        </StackPanel>
+    </Border>
+</Window>

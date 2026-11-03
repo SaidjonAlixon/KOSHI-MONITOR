@@ -25,6 +25,7 @@ const AlertsPage = page(() => import('@/pages/AlertsPage'), 'AlertsPage')
 const AuditPage = page(() => import('@/pages/AuditPage'), 'AuditPage')
 const UsersPage = page(() => import('@/pages/UsersPage'), 'UsersPage')
 const SettingsPage = page(() => import('@/pages/SettingsPage'), 'SettingsPage')
+const RemotePage = page(() => import('@/pages/RemotePage'), 'RemotePage')
 
 function guarded(permission: Permission, element: ReactNode) {
   return (
@@ -58,6 +59,7 @@ export const routes: RouteObject[] = [
       { path: 'audit', element: guarded(Permissions.AuditRead, <AuditPage />) },
       { path: 'users', element: guarded(Permissions.UsersManage, <UsersPage />) },
       { path: 'settings', element: guarded(Permissions.SettingsRead, <SettingsPage />) },
+      { path: 'remote/:deviceId', element: guarded(Permissions.RemoteControl, <RemotePage />) },
     ],
   },
   { path: '*', element: <Navigate to="/" replace /> },

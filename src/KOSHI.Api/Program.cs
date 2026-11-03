@@ -32,7 +32,9 @@ builder.Services.AddKoshiInfrastructure(builder.Configuration);
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<KOSHI.Application.Abstractions.ICurrentUser, HttpCurrentUser>();
 builder.Services.AddHostedService<MaintenanceWorker>();
-builder.Services.AddSignalR();
+builder.Services.AddSignalR()
+    .AddHubOptions<KOSHI.Api.Realtime.AgentHub>(o => o.MaximumReceiveMessageSize = 2 * 1024 * 1024);
+builder.Services.AddSingleton<KOSHI.Api.Realtime.RemoteRegistry>();
 builder.Services.AddSingleton<KOSHI.Application.Abstractions.IMonitoringNotifier, KOSHI.Api.Realtime.SignalRMonitoringNotifier>();
 
 builder.Services.AddControllers()
@@ -176,6 +178,8 @@ if (app.Configuration.GetValue("OpenApi:Enabled", app.Environment.IsDevelopment(
 
 app.MapControllers();
 app.MapHub<KOSHI.Api.Realtime.MonitoringHub>(KOSHI.Api.Realtime.MonitoringHub.Path);
+app.MapHub<KOSHI.Api.Realtime.RemoteHub>(KOSHI.Api.Realtime.RemoteHub.Path);
+app.MapHub<KOSHI.Api.Realtime.AgentHub>(KOSHI.Api.Realtime.AgentHub.Path);
 
 using (var scope = app.Services.CreateScope())
 {

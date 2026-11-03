@@ -22,6 +22,7 @@ export const Permissions = {
   UsersManage: 'users.manage',
   SettingsRead: 'settings.read',
   SettingsManage: 'settings.manage',
+  RemoteControl: 'remote.control',
   DataUnscoped: 'data.unscoped',
   RolesManage: 'roles.manage',
 } as const
