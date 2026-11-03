@@ -9,6 +9,7 @@ param([string]$Version = "1.0.0")
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
+if ($env:PATH -notlike "*$env:USERPROFILE\.dotnet*") { $env:PATH = "$env:USERPROFILE\.dotnet;$env:PATH" }
 
 $iscc = @(
     "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
