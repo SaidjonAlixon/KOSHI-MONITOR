@@ -115,12 +115,12 @@ export function AppLayout() {
 
   const sidebarBody = (isCollapsed: boolean) => (
     <>
-      <div className="flex h-16 shrink-0 items-center px-4">
-        <div className={`flex items-center gap-2 rounded-xl bg-white shadow-sm ${isCollapsed ? 'justify-center px-2 py-1.5' : 'px-3 py-1.5'}`}>
-          {isCollapsed ? <KoshiIcon className="size-8" /> : (
+      <div className="flex h-20 shrink-0 items-center px-3">
+        <div className={`flex items-center gap-2.5 rounded-xl bg-white shadow-sm ${isCollapsed ? 'justify-center px-2 py-2' : 'px-3.5 py-2'}`}>
+          {isCollapsed ? <KoshiIcon className="size-11" /> : (
             <>
-              <KoshiIcon className="size-7" />
-              <KoshiLogo className="h-5" />
+              <KoshiIcon className="size-10" />
+              <KoshiLogo className="h-8" />
             </>
           )}
         </div>
