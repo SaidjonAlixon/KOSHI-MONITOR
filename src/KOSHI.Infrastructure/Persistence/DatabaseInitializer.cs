@@ -73,6 +73,14 @@ public sealed class DatabaseInitializer(
             await db.SaveChangesAsync(ct);
         }
 
+        var legacyNotice = await db.SystemSettings.FirstOrDefaultAsync(s => s.Key == SettingsService.Keys.MonitoringNotice && s.Value.StartsWith("Bu korporativ kompyuter"), ct);
+        if (legacyNotice is not null)
+        {
+            legacyNotice.Value = SettingsService.Defaults.MonitoringNotice;
+            legacyNotice.UpdatedAt = now;
+            await db.SaveChangesAsync(ct);
+        }
+
         if (!await db.WorkSchedules.AnyAsync(ct))
         {
             db.WorkSchedules.Add(new WorkSchedule

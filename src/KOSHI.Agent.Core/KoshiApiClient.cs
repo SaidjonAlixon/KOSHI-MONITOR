@@ -55,6 +55,9 @@ public sealed class KoshiApiClient : IDisposable
     public Task<SupportMessageDto> SendSupportAsync(string text, CancellationToken ct) =>
         SendAsync<SupportMessageDto>(HttpMethod.Post, "api/agent/support", new SendSupportMessageRequest { Text = text }, ct);
 
+    public Task SendSupportTypingAsync(CancellationToken ct) =>
+        SendAsync<object>(HttpMethod.Post, "api/agent/support/typing", null, ct);
+
     private async Task<T> SendAsync<T>(HttpMethod method, string path, object? body, CancellationToken ct)
     {
         using var req = new HttpRequestMessage(method, path);

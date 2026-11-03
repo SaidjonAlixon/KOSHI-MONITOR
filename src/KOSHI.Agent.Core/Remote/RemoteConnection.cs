@@ -29,6 +29,9 @@ public sealed class RemoteConnection : IAsyncDisposable
     private CancellationTokenSource? _streamCts;
     private Guid? _sessionId;
 
+    public event Action<SupportMessageDto>? ChatMessageReceived;
+    public event Action<string>? ChatTypingReceived;
+
     public RemoteConnection(Uri server, string credential, IRemoteHost host, ILogger logger)
     {
         _host = host;
@@ -51,6 +54,8 @@ public sealed class RemoteConnection : IAsyncDisposable
                 : (false, "Unsupported command");
             await SafeInvoke("CommandResult", cmd.CommandId, ok, message);
         });
+        _hub.On<SupportMessageDto>("chatMessage", msg => ChatMessageReceived?.Invoke(msg));
+        _hub.On<string>("chatTyping", name => ChatTypingReceived?.Invoke(name));
         _hub.Closed += _ =>
         {
             if (_sessionId is { } id) StopSession(id, notifyServer: false, reason: "connection_closed");
@@ -59,6 +64,8 @@ public sealed class RemoteConnection : IAsyncDisposable
     }
 
     public HubConnectionState State => _hub.State;
+
+    public Task SendTypingAsync() => SafeInvoke("ChatTyping");
 
     public async Task StartAsync(CancellationToken ct)
     {

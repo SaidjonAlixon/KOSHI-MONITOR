@@ -10,7 +10,7 @@ namespace KOSHI.Api.Realtime;
 /// Real-time channel for the Live Monitoring page. Only an invalidation signal (device id) is pushed;
 /// clients re-fetch data through the normal, permission-checked REST endpoints.
 /// </summary>
-[Authorize(Policy = Permissions.MonitoringLive, AuthenticationSchemes = AuthSchemes.Admin)]
+[Authorize(AuthenticationSchemes = AuthSchemes.Admin)]
 public sealed class MonitoringHub : Hub
 {
     public const string Path = "/hubs/monitoring";

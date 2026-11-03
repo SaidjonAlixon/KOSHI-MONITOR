@@ -1,9 +1,11 @@
+using KOSHI.Api.Realtime;
 using KOSHI.Application.Security;
 using KOSHI.Application.Services;
 using KOSHI.Contracts;
 using KOSHI.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
 namespace KOSHI.Api.Controllers;
@@ -109,7 +111,7 @@ public sealed class OrganizationController(OrganizationService org) : Controller
 [ApiController]
 [Route("api/support")]
 [Authorize(Policy = Permissions.SupportChat)]
-public sealed class SupportController(SupportService support) : ControllerBase
+public sealed class SupportController(SupportService support, IHubContext<AgentHub> agents, IHubContext<MonitoringHub> monitoring) : ControllerBase
 {
     [HttpGet("threads")]
     public async Task<ActionResult<IReadOnlyList<SupportThreadDto>>> Threads(CancellationToken ct) => Ok(await support.ThreadsAsync(ct));
@@ -118,7 +120,21 @@ public sealed class SupportController(SupportService support) : ControllerBase
     public async Task<ActionResult<IReadOnlyList<SupportMessageDto>>> History(Guid deviceId, CancellationToken ct) => Ok(await support.HistoryForAdminAsync(deviceId, ct));
 
     [HttpPost("{deviceId:guid}")]
-    public async Task<ActionResult<SupportMessageDto>> Send(Guid deviceId, SendSupportMessageRequest request, CancellationToken ct) => Ok(await support.SendFromAdminAsync(deviceId, request.Text, ct));
+    public async Task<ActionResult<SupportMessageDto>> Send(Guid deviceId, SendSupportMessageRequest request, CancellationToken ct)
+    {
+        var dto = await support.SendFromAdminAsync(deviceId, request.Text, ct);
+        await agents.Clients.Group(AgentHub.Group(deviceId)).SendAsync("chatMessage", dto, ct);
+        await monitoring.Clients.All.SendAsync("supportMessage", dto, ct);
+        return Ok(dto);
+    }
+
+    [HttpPost("{deviceId:guid}/typing")]
+    public async Task<IActionResult> Typing(Guid deviceId, CancellationToken ct)
+    {
+        var name = User.FindFirst("email")?.Value ?? User.Identity?.Name ?? "Administrator";
+        await agents.Clients.Group(AgentHub.Group(deviceId)).SendAsync("chatTyping", name, ct);
+        return NoContent();
+    }
 }
 
 [ApiController]

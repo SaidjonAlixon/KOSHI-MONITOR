@@ -56,18 +56,27 @@
         </StackPanel>
 
         <StackPanel x:Name="SupportSection" Margin="28,18,28,20">
-            <TextBlock Text="Texnik yordam — administrator bilan chat" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource Ink}" />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Texnik yordam — administrator bilan chat" VerticalAlignment="Center" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource Ink}" />
+                <Button Grid.Column="1" Content="Alohida oynada ochish ↗" Padding="10,4" FontSize="11.5" Click="OnOpenChatWindow"
+                        Background="#EEF1FF" Foreground="#4338CA" BorderBrush="#C7D2FE" BorderThickness="1" FontWeight="SemiBold" Cursor="Hand" />
+            </Grid>
             <Border Margin="0,8,0,0" CornerRadius="10" BorderBrush="#E2E8F0" BorderThickness="1" Background="#F8FAFC">
                 <ScrollViewer x:Name="ChatScroll" Height="150" VerticalScrollBarVisibility="Auto" Padding="10,8">
                     <StackPanel x:Name="ChatList" />
                 </ScrollViewer>
             </Border>
-            <Grid Margin="0,8,0,0">
+            <TextBlock x:Name="TypingText" Margin="0,4,0,0" Text="Administrator yozmoqda…" FontSize="11" FontStyle="Italic" Foreground="#4F46E5" Visibility="Collapsed" />
+            <Grid Margin="0,6,0,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBox x:Name="ChatInput" Padding="8" FontSize="12" KeyDown="OnChatKeyDown" />
+                <TextBox x:Name="ChatInput" Padding="8" FontSize="12" KeyDown="OnChatKeyDown" TextChanged="OnChatTextChanged" />
                 <Button Grid.Column="1" Content="Yuborish" Margin="8,0,0,0" Padding="12,0" Click="OnChatSend"
                         Background="#4F46E5" Foreground="White" BorderThickness="0" FontWeight="SemiBold" />
             </Grid>

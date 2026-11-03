@@ -148,6 +148,7 @@ public sealed class PolicyService(IKoshiDbContext db, AuditWriter audit, ICurren
         MarkChanged(policy, now);
         audit.Record("application_rule.create", "ApplicationRule", rule.Id, new { rule.PolicyId, rule.ProcessName, classification = rule.Classification.ToString(), restriction = rule.Restriction.ToString() });
         await db.SaveChangesAsync(ct);
+        await PublishAsync(r.PolicyId, new PublishPolicyRequest { ApproveEnforcement = true, Note = $"Qoida qo'shildi: {rule.ProcessName}" }, ct);
         return ToDto(rule);
     }
 
@@ -166,16 +167,20 @@ public sealed class PolicyService(IKoshiDbContext db, AuditWriter audit, ICurren
         MarkChanged(rule.Policy!, now);
         audit.Record("application_rule.update", "ApplicationRule", id, new { before, after = new { rule.ProcessName, classification = rule.Classification.ToString(), restriction = rule.Restriction.ToString() } });
         await db.SaveChangesAsync(ct);
+        await PublishAsync(rule.PolicyId, new PublishPolicyRequest { ApproveEnforcement = true, Note = $"Qoida yangilandi: {rule.ProcessName}" }, ct);
         return ToDto(rule);
     }
 
     public async Task DeleteRuleAsync(Guid id, CancellationToken ct = default)
     {
         var rule = await db.ApplicationRules.Include(x => x.Policy).FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw Errors.NotFound("Application rule");
+        var policyId = rule.PolicyId;
+        var proc = rule.ProcessName;
         db.ApplicationRules.Remove(rule);
         MarkChanged(rule.Policy!, Now);
         audit.Record("application_rule.delete", "ApplicationRule", id, new { rule.PolicyId, rule.ProcessName });
         await db.SaveChangesAsync(ct);
+        await PublishAsync(policyId, new PublishPolicyRequest { ApproveEnforcement = true, Note = $"Qoida o'chirildi: {proc}" }, ct);
     }
 
     // ---------- Agent-facing ----------

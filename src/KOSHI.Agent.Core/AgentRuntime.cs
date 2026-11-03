@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.Versioning;
 using KOSHI.Agent.Core.Remote;
 using KOSHI.Agent.Core.Windows;
@@ -8,12 +9,15 @@ namespace KOSHI.Agent.Core;
 
 public enum AgentState { NotActivated, Connecting, Online, Offline, Blocked, Revoked }
 
-/// <summary>Implemented by the tray app: shows the password dialog for locked apps and terminates refused apps.</summary>
+/// <summary>Implemented by the tray app: shows the password dialog for locked apps and terminates refused/blocked apps.</summary>
 public interface IAppLockHost
 {
-    /// <summary>Called when a password-protected app is in the foreground and not yet unlocked.
+    /// <summary>Called when a password-protected app is running and not yet unlocked.
     /// Returns true to allow it, false to close it. Verify with <see cref="AppLock.Verify"/>.</summary>
     bool ChallengeAndEnforce(AgentApplicationRuleDto rule);
+
+    /// <summary>Immediately closes all user-session instances of a blocked application.</summary>
+    void TerminateApp(string processName);
 }
 
 public static class AppLock
@@ -38,7 +42,7 @@ public sealed record AgentStatus(
     bool RemoteChannelConnected,
     bool AutoUpdateEnabled);
 
-/// <summary>Runs inside the interactive user session: sampling, local queue, upload, heartbeat, policy and remote channel.</summary>
+/// <summary>Runs inside the interactive user session: sampling, local queue, upload, heartbeat, policy, app enforcement and real-time chat/remote channel.</summary>
 [SupportedOSPlatform("windows")]
 public sealed class AgentRuntime : IAsyncDisposable
 {
@@ -51,7 +55,10 @@ public sealed class AgentRuntime : IAsyncDisposable
     private readonly IAppLockHost _appLockHost;
     private readonly ILogger _logger;
     private readonly HashSet<string> _unlockedApps = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<Guid> _seenMessages = [];
+    private readonly List<ChatMessage> _chatHistory = [];
     private DateTime? _chatSince;
+    private DateTime _lastTypingSent = DateTime.MinValue;
     private readonly ActivityTracker _tracker = new();
     private readonly OfflineQueue _queue = new(AgentPaths.QueueDir);
     private readonly Dictionary<string, double> _todayForeground = new(StringComparer.OrdinalIgnoreCase);
@@ -71,17 +78,25 @@ public sealed class AgentRuntime : IAsyncDisposable
         _remoteHost = remoteHost;
         _appLockHost = appLockHost;
         _logger = logger;
-        Status = new AgentStatus(AgentState.NotActivated, null, null, false, null, null, 0, null, DefaultNotice, "IT bo'limi", false, true);
+        Status = new AgentStatus(AgentState.NotActivated, null, null, false, null, null, 0, null, DefaultNotice, "", false, true);
     }
 
     public const string DefaultNotice = "Korporativ kompyuter monitoringi faol.";
 
     public AgentStatus Status { get; private set; }
 
+    public IReadOnlyList<ChatMessage> ChatHistory
+    {
+        get { lock (_gate) return [.. _chatHistory]; }
+    }
+
     public event Action<AgentStatus>? StatusChanged;
 
     /// <summary>Raised for each support chat message (from admin, and echoes of the agent's own sent messages).</summary>
     public event Action<ChatMessage>? ChatReceived;
+
+    /// <summary>Raised when an administrator is typing a message to this device.</summary>
+    public event Action<string>? AdminTyping;
 
     public async Task<bool> SendChatAsync(string text)
     {
@@ -89,7 +104,7 @@ public sealed class AgentRuntime : IAsyncDisposable
         try
         {
             var m = await _api.SendSupportAsync(text.Trim(), CancellationToken.None);
-            ChatReceived?.Invoke(new ChatMessage(m.Id, false, null, m.Text, m.CreatedAt));
+            EmitChat(new ChatMessage(m.Id, false, null, m.Text, m.CreatedAt));
             if (m.CreatedAt > (_chatSince ?? DateTime.MinValue)) _chatSince = m.CreatedAt;
             return true;
         }
@@ -98,6 +113,27 @@ public sealed class AgentRuntime : IAsyncDisposable
             _logger.LogDebug(ex, "Chat send failed");
             return false;
         }
+    }
+
+    public void NotifyTyping()
+    {
+        var now = DateTime.UtcNow;
+        if ((now - _lastTypingSent).TotalMilliseconds < 1200) return;
+        _lastTypingSent = now;
+        if (_remote?.State == Microsoft.AspNetCore.SignalR.Client.HubConnectionState.Connected)
+            _ = _remote.SendTypingAsync();
+        else if (_api is not null)
+            _ = _api.SendSupportTypingAsync(CancellationToken.None);
+    }
+
+    private void EmitChat(ChatMessage msg)
+    {
+        lock (_gate)
+        {
+            if (!_seenMessages.Add(msg.Id)) return;
+            _chatHistory.Add(msg);
+        }
+        ChatReceived?.Invoke(msg);
     }
 
     public void Start()
@@ -122,11 +158,18 @@ public sealed class AgentRuntime : IAsyncDisposable
             SetStatus(s => s with { State = AgentState.Connecting, ServerUrl = _config.ServerUrl, DeviceName = _config.DisplayName });
             _api = new KoshiApiClient(_config.ServerUrl, credential);
             _remote = new RemoteConnection(_api.BaseAddress, credential, _remoteHost, _logger);
+            _remote.ChatMessageReceived += m =>
+            {
+                var fromAdmin = string.Equals(m.Sender, "Admin", StringComparison.OrdinalIgnoreCase);
+                EmitChat(new ChatMessage(m.Id, fromAdmin, m.SenderName, m.Text, m.CreatedAt));
+                if (m.CreatedAt > (_chatSince ?? DateTime.MinValue)) _chatSince = m.CreatedAt;
+            };
+            _remote.ChatTypingReceived += name => AdminTyping?.Invoke(name);
             _ = _remote.StartAsync(ct);
 
             try
             {
-                await Task.WhenAll(SampleLoop(ct), SyncLoop(ct), HeartbeatLoop(ct));
+                await Task.WhenAll(SampleLoop(ct), EnforceRulesLoop(ct), SyncLoop(ct), HeartbeatLoop(ct));
             }
             catch (DeviceRejectedException ex)
             {
@@ -177,12 +220,101 @@ public sealed class AgentRuntime : IAsyncDisposable
                 }
             }
 
-            EnforceAppLock();
             await Task.Delay(TimeSpan.FromSeconds(_policy?.SamplingIntervalSeconds ?? 3), ct);
         }
     }
 
-    /// <summary>Reports restricted applications and exceeded daily limits as policy violations (audit). Enforcement is done by the service via AppLocker.</summary>
+    /// <summary>Fast 750ms enforcement loop: closes blocked apps immediately and prompts for password-locked apps as soon as they open.</summary>
+    private async Task EnforceRulesLoop(CancellationToken ct)
+    {
+        var currentSession = Process.GetCurrentProcess().SessionId;
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                var rules = _policy?.Rules;
+                if (_monitoringAllowed && rules is { Count: > 0 })
+                {
+                    var fg = _source.GetForeground()?.ProcessName;
+                    var runningNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var windowedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    if (!string.IsNullOrEmpty(fg))
+                    {
+                        var normFg = NormalizeProc(fg);
+                        runningNames.Add(normFg);
+                        windowedNames.Add(normFg);
+                    }
+
+                    foreach (var p in Process.GetProcesses())
+                    {
+                        try
+                        {
+                            if (p.SessionId != currentSession) continue;
+                            var norm = NormalizeProc(p.ProcessName);
+                            runningNames.Add(norm);
+                            if (p.MainWindowHandle != 0) windowedNames.Add(norm);
+                        }
+                        catch
+                        {
+                            // Ignore inaccessible process
+                        }
+                        finally
+                        {
+                            p.Dispose();
+                        }
+                    }
+
+                    // If a previously unlocked app was closed by the user, require the password again next time it opens.
+                    lock (_gate)
+                    {
+                        _unlockedApps.RemoveWhere(u => !runningNames.Contains(NormalizeProc(u)));
+                    }
+
+                    foreach (var rule in rules)
+                    {
+                        var target = NormalizeProc(rule.ProcessName);
+                        if (string.IsNullOrEmpty(target)) continue;
+
+                        if (rule.Restriction == ApplicationRestrictionDto.Block && runningNames.Contains(target))
+                        {
+                            _appLockHost.TerminateApp(rule.ProcessName);
+                            lock (_gate)
+                            {
+                                if (_violationsReported.Add($"block:{target}"))
+                                    _tracker.AddViolation(rule.ProcessName, DateTime.UtcNow, "blocked");
+                            }
+                            continue;
+                        }
+
+                        bool isUnlocked;
+                        lock (_gate) isUnlocked = _unlockedApps.Contains(target);
+
+                        if (rule.RequirePassword && !string.IsNullOrEmpty(rule.PasswordHash) && !isUnlocked && windowedNames.Contains(target))
+                        {
+                            if (_appLockHost.ChallengeAndEnforce(rule))
+                            {
+                                lock (_gate) _unlockedApps.Add(target);
+                            }
+                            else
+                            {
+                                lock (_gate) _tracker.AddViolation(rule.ProcessName, DateTime.UtcNow, "password_denied");
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogDebug(ex, "App rule enforcement iteration failed");
+            }
+
+            await Task.Delay(750, ct);
+        }
+    }
+
+    private static string NormalizeProc(string name) =>
+        System.IO.Path.GetFileNameWithoutExtension(name.Trim());
+
     private void CheckRules(string process, DateTime now)
     {
         var day = DateOnly.FromDateTime(now.ToLocalTime());
@@ -191,50 +323,17 @@ public sealed class AgentRuntime : IAsyncDisposable
             _today = day;
             _todayForeground.Clear();
             _violationsReported.Clear();
-            _unlockedApps.Clear();
         }
         var interval = _policy?.SamplingIntervalSeconds ?? 3;
         _todayForeground[process] = _todayForeground.GetValueOrDefault(process) + interval;
 
-        var rule = _policy?.Rules.FirstOrDefault(r => string.Equals(r.ProcessName, process, StringComparison.OrdinalIgnoreCase));
+        var target = NormalizeProc(process);
+        var rule = _policy?.Rules.FirstOrDefault(r => string.Equals(NormalizeProc(r.ProcessName), target, StringComparison.OrdinalIgnoreCase));
         if (rule is null) return;
-        if (rule.Restriction == ApplicationRestrictionDto.Block && _violationsReported.Add($"block:{process}"))
+        if (rule.Restriction == ApplicationRestrictionDto.Block && _violationsReported.Add($"block:{target}"))
             _tracker.AddViolation(process, now, "blocked");
-        if (rule.DailyLimitMinutes is { } limit && _todayForeground[process] > limit * 60 && _violationsReported.Add($"limit:{process}"))
+        if (rule.DailyLimitMinutes is { } limit && _todayForeground[process] > limit * 60 && _violationsReported.Add($"limit:{target}"))
             _tracker.AddViolation(process, now, "daily_limit");
-        if (rule.RequirePassword && !string.IsNullOrEmpty(rule.PasswordHash) && !_unlockedApps.Contains(process))
-            _pendingLock = rule;
-    }
-
-    private AgentApplicationRuleDto? _pendingLock;
-    private volatile bool _challengeInProgress;
-
-    /// <summary>Shows the password prompt for a locked app outside the sampling lock. Correct password unlocks for the session.</summary>
-    private void EnforceAppLock()
-    {
-        AgentApplicationRuleDto? rule;
-        lock (_gate)
-        {
-            rule = _pendingLock;
-            _pendingLock = null;
-        }
-        if (rule is null || _challengeInProgress) return;
-        _challengeInProgress = true;
-        try
-        {
-            if (_appLockHost.ChallengeAndEnforce(rule))
-                lock (_gate) _unlockedApps.Add(rule.ProcessName);
-            else
-                _tracker.AddViolation(rule.ProcessName, DateTime.UtcNow, "password_denied");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "App-lock enforcement failed");
-        }
-        finally
-        {
-            _challengeInProgress = false;
-        }
     }
 
     private async Task SyncLoop(CancellationToken ct)
@@ -278,7 +377,7 @@ public sealed class AgentRuntime : IAsyncDisposable
             }
             SetStatus(s => s with { QueueLength = _queue.Count, RemoteChannelConnected = _remote?.State == Microsoft.AspNetCore.SignalR.Client.HubConnectionState.Connected });
             await PollChatAsync(ct);
-            await Task.Delay(TimeSpan.FromSeconds(15), ct);
+            await Task.Delay(TimeSpan.FromSeconds(8), ct);
         }
     }
 
@@ -291,7 +390,7 @@ public sealed class AgentRuntime : IAsyncDisposable
             foreach (var m in poll.Messages)
             {
                 var fromAdmin = string.Equals(m.Sender, "Admin", StringComparison.OrdinalIgnoreCase);
-                if (fromAdmin) ChatReceived?.Invoke(new ChatMessage(m.Id, true, m.SenderName, m.Text, m.CreatedAt));
+                EmitChat(new ChatMessage(m.Id, fromAdmin, m.SenderName, m.Text, m.CreatedAt));
                 if (m.CreatedAt > (_chatSince ?? DateTime.MinValue)) _chatSince = m.CreatedAt;
             }
         }

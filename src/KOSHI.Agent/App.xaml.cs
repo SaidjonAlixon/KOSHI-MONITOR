@@ -14,6 +14,7 @@ public partial class App : System.Windows.Application
     private Mutex? _mutex;
     private Forms.NotifyIcon? _tray;
     private StatusWindow? _window;
+    private ChatWindow? _chatWindow;
     private AgentRuntime? _runtime;
     private ILoggerFactory? _loggers;
 
@@ -39,6 +40,7 @@ public partial class App : System.Windows.Application
         };
 
         _window = new StatusWindow();
+        _chatWindow = new ChatWindow();
         _tray = new Forms.NotifyIcon
         {
             Icon = LoadTrayIcon(),
@@ -53,8 +55,24 @@ public partial class App : System.Windows.Application
         runtime = new AgentRuntime(new WindowsActivitySource(), host, new AppLockHost(), _loggers.CreateLogger("KOSHI.Agent"));
         _runtime = runtime;
         _runtime.StatusChanged += s => Dispatcher.BeginInvoke(() => Render(s));
-        _runtime.ChatReceived += m => Dispatcher.BeginInvoke(() => _window?.AddChatMessage(m));
-        if (_window is not null) _window.ChatSendRequested = text => _runtime!.SendChatAsync(text);
+        _runtime.ChatReceived += m => Dispatcher.BeginInvoke(() =>
+        {
+            _window?.AddChatMessage(m);
+            _chatWindow?.AddChatMessage(m);
+        });
+        _runtime.AdminTyping += name => Dispatcher.BeginInvoke(() =>
+        {
+            _window?.ShowAdminTyping(name);
+            _chatWindow?.ShowAdminTyping(name);
+        });
+
+        _window.ChatSendRequested = text => _runtime!.SendChatAsync(text);
+        _window.TypingTriggered = () => _runtime!.NotifyTyping();
+        _window.OpenChatWindowRequested = ShowChatWindow;
+
+        _chatWindow.ChatSendRequested = text => _runtime!.SendChatAsync(text);
+        _chatWindow.TypingTriggered = () => _runtime!.NotifyTyping();
+
         Render(_runtime.Status);
         _runtime.Start();
 
@@ -95,9 +113,18 @@ public partial class App : System.Windows.Application
     {
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("KOSHI holati", null, (_, _) => ShowStatus());
+        menu.Items.Add("Administrator bilan chat", null, (_, _) => ShowChatWindow());
         menu.Items.Add("Monitoring siyosati haqida", null, (_, _) => ShowStatus(StatusWindow.Section.Policy));
-        menu.Items.Add("Texnik yordam", null, (_, _) => ShowStatus(StatusWindow.Section.Support));
         return menu;
+    }
+
+    private void ShowChatWindow()
+    {
+        if (_chatWindow is null) return;
+        if (_runtime is not null) _chatWindow.LoadHistory(_runtime.ChatHistory);
+        _chatWindow.Show();
+        _chatWindow.WindowState = WindowState.Normal;
+        _chatWindow.Activate();
     }
 
     private void ShowStatus(StatusWindow.Section section = StatusWindow.Section.Status)

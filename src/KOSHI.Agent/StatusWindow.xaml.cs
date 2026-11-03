@@ -3,12 +3,12 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using KOSHI.Agent.Core;
 using Color = System.Windows.Media.Color;
 using ColorConverter = System.Windows.Media.ColorConverter;
 using HorizontalAlignment = System.Windows.HorizontalAlignment;
 using KeyEventArgs = System.Windows.Input.KeyEventArgs;
-using TextBox = System.Windows.Controls.TextBox;
 
 namespace KOSHI.Agent;
 
@@ -16,16 +16,34 @@ public partial class StatusWindow : Window
 {
     public enum Section { Status, Policy, Support }
 
+    private readonly HashSet<Guid> _renderedIds = [];
+    private readonly DispatcherTimer _typingTimer;
+
     public Func<string, Task<bool>>? ChatSendRequested { get; set; }
+    public Action? TypingTriggered { get; set; }
+    public Action? OpenChatWindowRequested { get; set; }
 
     public StatusWindow()
     {
         InitializeComponent();
         VersionText.Text = AgentInfo.VersionWithDate;
+        _typingTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        _typingTimer.Tick += (_, _) =>
+        {
+            _typingTimer.Stop();
+            TypingText.Visibility = Visibility.Collapsed;
+        };
     }
 
     public void AddChatMessage(ChatMessage m)
     {
+        if (!_renderedIds.Add(m.Id)) return;
+        if (m.FromAdmin)
+        {
+            _typingTimer.Stop();
+            TypingText.Visibility = Visibility.Collapsed;
+        }
+
         var bubble = new Border
         {
             CornerRadius = new CornerRadius(10),
@@ -45,6 +63,21 @@ public partial class StatusWindow : Window
         ChatScroll.ScrollToEnd();
     }
 
+    public void ShowAdminTyping(string? senderName)
+    {
+        TypingText.Text = string.IsNullOrWhiteSpace(senderName) ? "Administrator yozmoqda…" : $"{senderName} yozmoqda…";
+        TypingText.Visibility = Visibility.Visible;
+        _typingTimer.Stop();
+        _typingTimer.Start();
+    }
+
+    private void OnOpenChatWindow(object sender, RoutedEventArgs e) => OpenChatWindowRequested?.Invoke();
+
+    private void OnChatTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!string.IsNullOrWhiteSpace(ChatInput.Text)) TypingTriggered?.Invoke();
+    }
+
     private async void OnChatSend(object sender, RoutedEventArgs e) => await SendChatAsync();
 
     private async void OnChatKeyDown(object sender, KeyEventArgs e)
@@ -56,11 +89,9 @@ public partial class StatusWindow : Window
     {
         var text = ChatInput.Text.Trim();
         if (text.Length == 0 || ChatSendRequested is null) return;
-        ChatInput.IsEnabled = false;
-        var ok = await ChatSendRequested(text);
-        ChatInput.IsEnabled = true;
-        if (ok) ChatInput.Clear();
+        ChatInput.Clear();
         ChatInput.Focus();
+        await ChatSendRequested(text);
     }
 
     public void Render(AgentStatus s)

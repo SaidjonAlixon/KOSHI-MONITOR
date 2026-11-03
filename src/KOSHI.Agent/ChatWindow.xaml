@@ -1,0 +1,54 @@
+<Window x:Class="KOSHI.Agent.ChatWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="KOSHI — Administrator bilan chat"
+        Icon="pack://application:,,,/Assets/koshi.ico"
+        Width="460" Height="580"
+        MinWidth="380" MinHeight="420"
+        ResizeMode="CanResize"
+        WindowStartupLocation="CenterScreen"
+        Background="White"
+        FontFamily="Segoe UI">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="6" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="{StaticResource BrandGradient}" />
+
+        <Border Grid.Row="1" Padding="18,14" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Background="White">
+            <StackPanel Orientation="Horizontal">
+                <Image Source="pack://application:,,,/Assets/koshi-icon.png" Width="32" Height="32" VerticalAlignment="Center" />
+                <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="Administrator bilan to‘g‘ridan to‘g‘ri chat" FontWeight="SemiBold" FontSize="14" Foreground="#0B1226" />
+                    <TextBlock x:Name="SubtitleText" Text="Xabarlar real vaqtda yetkaziladi" FontSize="11" Foreground="#64748B" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer Grid.Row="2" x:Name="ChatScroll" VerticalScrollBarVisibility="Auto" Background="#F8FAFC" Padding="16,12">
+            <StackPanel x:Name="ChatList" />
+        </ScrollViewer>
+
+        <Border Grid.Row="3" Padding="16,4" Background="#F8FAFC">
+            <TextBlock x:Name="TypingText" Text="Administrator yozmoqda…" FontSize="11.5" FontStyle="Italic" Foreground="#4F46E5" Visibility="Collapsed" />
+        </Border>
+
+        <Border Grid.Row="4" Padding="14,12" BorderBrush="#E2E8F0" BorderThickness="0,1,0,0" Background="White">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="ChatInput" Padding="10,8" FontSize="13" VerticalContentAlignment="Center"
+                         KeyDown="OnChatKeyDown" TextChanged="OnChatTextChanged" />
+                <Button Grid.Column="1" Content="Yuborish" Margin="8,0,0,0" Padding="18,8" Click="OnChatSend"
+                        Background="#4F46E5" Foreground="White" BorderThickness="0" FontWeight="SemiBold" Cursor="Hand" />
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

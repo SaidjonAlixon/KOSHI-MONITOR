@@ -1,9 +1,11 @@
+using KOSHI.Api.Realtime;
 using KOSHI.Api.Security;
 using KOSHI.Application.Services;
 using KOSHI.Contracts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.SignalR;
 
 namespace KOSHI.Api.Controllers;
 
@@ -38,6 +40,17 @@ public sealed class AgentController(DeviceService devices, TelemetryService tele
         Ok(await support.PollForDeviceAsync(User.DeviceId(), since, ct));
 
     [HttpPost("api/agent/support")]
-    public async Task<ActionResult<SupportMessageDto>> SupportSend([FromServices] SupportService support, SendSupportMessageRequest request, CancellationToken ct) =>
-        Ok(await support.SendFromDeviceAsync(User.DeviceId(), request.Text, ct));
+    public async Task<ActionResult<SupportMessageDto>> SupportSend([FromServices] SupportService support, [FromServices] IHubContext<MonitoringHub> monitoring, SendSupportMessageRequest request, CancellationToken ct)
+    {
+        var dto = await support.SendFromDeviceAsync(User.DeviceId(), request.Text, ct);
+        await monitoring.Clients.All.SendAsync("supportMessage", dto, ct);
+        return Ok(dto);
+    }
+
+    [HttpPost("api/agent/support/typing")]
+    public async Task<IActionResult> SupportTyping([FromServices] IHubContext<MonitoringHub> monitoring, CancellationToken ct)
+    {
+        await monitoring.Clients.All.SendAsync("supportTyping", User.DeviceId(), ct);
+        return NoContent();
+    }
 }

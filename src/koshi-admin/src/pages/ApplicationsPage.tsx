@@ -107,7 +107,7 @@ function RuleForm({ policyId, draft, onDone }: { policyId: string; draft: Draft;
           <ErrorState error={save.error} />
         </div>
       )}
-      <p className="text-xs text-slate-500 sm:col-span-2">O‘zgarish siyosat qoralamasiga yoziladi va siyosat publish qilinganda agentlarga yetkaziladi. Tizim jarayonlarini bloklash server tomonida rad etiladi.</p>
+      <p className="text-xs text-slate-500 sm:col-span-2">O‘zgarish saqlanishi bilan siyosat avtomatik nashr qilinadi va ulangan kompyuterlarga darhol qo‘llaniladi.</p>
       <div className="flex justify-end gap-2 sm:col-span-2">
         <Button type="button" variant="secondary" onClick={onDone}>
           Bekor qilish

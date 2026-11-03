@@ -116,6 +116,9 @@ public sealed class AgentHub(RemoteRegistry registry, IHubContext<RemoteHub> adm
         await audit.RecordAndSaveAsync("remote.command_result", "Device", DeviceId, new { commandId, success, message = Truncate(message, 300) }, success, deviceId: DeviceId);
     }
 
+    public async Task ChatTyping() =>
+        await monitoring.Clients.All.SendAsync("supportTyping", DeviceId);
+
     public static string Group(Guid deviceId) => $"device:{deviceId:N}";
 
     private async Task AuditAsync(RemoteSession s, string action, object details)
