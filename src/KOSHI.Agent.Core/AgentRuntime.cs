@@ -1,5 +1,8 @@
 using System.Diagnostics;
+using System.Net.Http.Json;
 using System.Runtime.Versioning;
+using System.Security.Cryptography;
+using System.Text.Json;
 using KOSHI.Agent.Core.Remote;
 using KOSHI.Agent.Core.Windows;
 using KOSHI.Contracts;
@@ -8,6 +11,8 @@ using Microsoft.Extensions.Logging;
 namespace KOSHI.Agent.Core;
 
 public enum AgentState { NotActivated, Connecting, Online, Offline, Blocked, Revoked }
+
+public sealed record AvailableUpdateInfo(string Version, string BuildDate, string FileName, long Size, string Sha256);
 
 /// <summary>Implemented by the tray app: shows the password dialog for locked apps and terminates refused/blocked apps.</summary>
 public interface IAppLockHost
@@ -59,6 +64,8 @@ public sealed class AgentRuntime : IAsyncDisposable
     private readonly List<ChatMessage> _chatHistory = [];
     private DateTime? _chatSince;
     private DateTime _lastTypingSent = DateTime.MinValue;
+    private DateTime _lastUpdateCheck = DateTime.MinValue;
+    private string? _notifiedUpdateVersion;
     private readonly ActivityTracker _tracker = new();
     private readonly OfflineQueue _queue = new(AgentPaths.QueueDir);
     private readonly Dictionary<string, double> _todayForeground = new(StringComparer.OrdinalIgnoreCase);
@@ -97,6 +104,11 @@ public sealed class AgentRuntime : IAsyncDisposable
 
     /// <summary>Raised when an administrator is typing a message to this device.</summary>
     public event Action<string>? AdminTyping;
+
+    /// <summary>Raised when a newer agent version is published on the server.</summary>
+    public event Action<AvailableUpdateInfo>? UpdateAvailable;
+
+    public AvailableUpdateInfo? AvailableUpdate { get; private set; }
 
     public async Task<bool> SendChatAsync(string text)
     {
@@ -377,8 +389,105 @@ public sealed class AgentRuntime : IAsyncDisposable
             }
             SetStatus(s => s with { QueueLength = _queue.Count, RemoteChannelConnected = _remote?.State == Microsoft.AspNetCore.SignalR.Client.HubConnectionState.Connected });
             await PollChatAsync(ct);
+            if (DateTime.UtcNow - _lastUpdateCheck >= TimeSpan.FromSeconds(45))
+            {
+                _lastUpdateCheck = DateTime.UtcNow;
+                await CheckForUpdateAsync(ct);
+            }
             await Task.Delay(TimeSpan.FromSeconds(8), ct);
         }
+    }
+
+    public async Task CheckForUpdateNowAsync() => await CheckForUpdateAsync(CancellationToken.None);
+
+    private async Task CheckForUpdateAsync(CancellationToken ct)
+    {
+        if (_config is null) return;
+        try
+        {
+            var baseUri = new Uri(_config.ServerUrl.TrimEnd('/') + "/");
+            using var http = new HttpClient { BaseAddress = baseUri, Timeout = TimeSpan.FromSeconds(15) };
+            var rel = await GetReleaseJsonAsync(http, "api/agent/release/latest.json", ct)
+                      ?? await GetReleaseJsonAsync(http, "downloads/latest.json", ct);
+            if (rel is null || string.IsNullOrWhiteSpace(rel.Version)) return;
+            if (!Version.TryParse(rel.Version, out var latest) || !Version.TryParse(AgentInfo.Version, out var current)) return;
+            if (latest <= current) return;
+
+            AvailableUpdate = rel;
+            if (_notifiedUpdateVersion != rel.Version)
+            {
+                _notifiedUpdateVersion = rel.Version;
+                UpdateAvailable?.Invoke(rel);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Update check failed");
+        }
+    }
+
+    public async Task<(bool Success, string Message)> InstallUpdateAsync(AvailableUpdateInfo release, IProgress<int>? progress = null, CancellationToken ct = default)
+    {
+        if (_config is null) return (false, "Server manzili sozlanmagan.");
+        try
+        {
+            var baseUri = new Uri(_config.ServerUrl.TrimEnd('/') + "/");
+            using var http = new HttpClient { BaseAddress = baseUri, Timeout = TimeSpan.FromMinutes(10) };
+            var temp = Path.Combine(Path.GetTempPath(), $"KOSHI-Agent-Setup-{release.Version}.exe");
+
+            var resp = await http.GetAsync("api/agent/release/download", HttpCompletionOption.ResponseHeadersRead, ct);
+            if (!resp.IsSuccessStatusCode)
+            {
+                resp.Dispose();
+                var fileName = Path.GetFileName(release.FileName);
+                resp = await http.GetAsync($"downloads/{Uri.EscapeDataString(fileName)}", HttpCompletionOption.ResponseHeadersRead, ct);
+            }
+
+            using (resp)
+            {
+                if (!resp.IsSuccessStatusCode) return (false, $"Yuklab bo‘lmadi (HTTP {(int)resp.StatusCode}).");
+                var total = resp.Content.Headers.ContentLength ?? release.Size;
+                await using var input = await resp.Content.ReadAsStreamAsync(ct);
+                await using var fs = File.Create(temp);
+                var buffer = new byte[81920];
+                long readTotal = 0;
+                int read;
+                while ((read = await input.ReadAsync(buffer, ct)) > 0)
+                {
+                    await fs.WriteAsync(buffer.AsMemory(0, read), ct);
+                    readTotal += read;
+                    if (total > 0) progress?.Report((int)Math.Clamp(readTotal * 100 / total, 1, 99));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(release.Sha256))
+            {
+                await using var verifyStream = File.OpenRead(temp);
+                var actual = Convert.ToHexString(await SHA256.HashDataAsync(verifyStream, ct));
+                if (!actual.Equals(release.Sha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    File.Delete(temp);
+                    return (false, "Yuklangan fayl xesh summasi (SHA-256) mos kelmadi.");
+                }
+            }
+
+            progress?.Report(100);
+            Process.Start(new ProcessStartInfo(temp, "/SILENT /NORESTART /SUPPRESSMSGBOXES") { UseShellExecute = true });
+            return (true, "Yangilanish o‘rnatilmoqda…");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Manual update install failed");
+            return (false, $"Xatolik: {ex.Message}");
+        }
+    }
+
+    private static async Task<AvailableUpdateInfo?> GetReleaseJsonAsync(HttpClient http, string path, CancellationToken ct)
+    {
+        using var resp = await http.GetAsync(path, ct);
+        if (!resp.IsSuccessStatusCode) return null;
+        var json = (await resp.Content.ReadAsStringAsync(ct)).TrimStart('\uFEFF');
+        return JsonSerializer.Deserialize<AvailableUpdateInfo>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web));
     }
 
     private async Task PollChatAsync(CancellationToken ct)

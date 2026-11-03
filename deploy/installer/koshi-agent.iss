@@ -40,13 +40,17 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 Source: "..\..\artifacts\agent\*"; DestDir: "{app}\agent"; Flags: recursesubdirs ignoreversion
 Source: "..\..\artifacts\service\*"; DestDir: "{app}\service"; Flags: recursesubdirs ignoreversion
 
+[Icons]
+Name: "{commondesktop}\KOSHI Agent"; Filename: "{app}\agent\KOSHI.Agent.exe"; Parameters: "--show"; IconFilename: "{app}\agent\KOSHI.Agent.exe"
+Name: "{commonprograms}\KOSHI Agent"; Filename: "{app}\agent\KOSHI.Agent.exe"; Parameters: "--show"; IconFilename: "{app}\agent\KOSHI.Agent.exe"
+
 [Registry]
 ; The tray agent (visible monitoring indicator) starts in every interactive session.
 Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "KOSHI Agent"; ValueData: """{app}\agent\KOSHI.Agent.exe"""; Flags: uninsdeletevalue
 
 [Run]
 Filename: "{app}\agent\KOSHI.Agent.exe"; Parameters: "--show"; Flags: nowait postinstall runasoriginaluser skipifsilent; Description: "KOSHI Agent oynasini ochish"
-Filename: "{app}\agent\KOSHI.Agent.exe"; Flags: nowait runasoriginaluser; Check: WizardSilent
+Filename: "{app}\agent\KOSHI.Agent.exe"; Parameters: "--show"; Flags: nowait runasoriginaluser; Check: WizardSilent
 
 [UninstallRun]
 Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM KOSHI.Agent.exe"; Flags: runhidden; RunOnceId: "KillTray"

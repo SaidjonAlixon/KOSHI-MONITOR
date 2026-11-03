@@ -11,10 +11,13 @@ namespace KOSHI.Agent;
 public partial class App : System.Windows.Application
 {
     private const string SingleInstanceMutex = @"Local\KOSHI.Agent.Tray";
+    private const string ShowWindowEventName = @"Local\KOSHI.Agent.ShowWindow";
     private Mutex? _mutex;
+    private EventWaitHandle? _showEvent;
     private Forms.NotifyIcon? _tray;
     private StatusWindow? _window;
     private ChatWindow? _chatWindow;
+    private UpdatePromptWindow? _updateWindow;
     private AgentRuntime? _runtime;
     private ILoggerFactory? _loggers;
 
@@ -24,9 +27,27 @@ public partial class App : System.Windows.Application
         _mutex = new Mutex(initiallyOwned: true, SingleInstanceMutex, out var created);
         if (!created)
         {
+            try
+            {
+                using var evt = EventWaitHandle.OpenExisting(ShowWindowEventName);
+                evt.Set();
+            }
+            catch
+            {
+                // Ignore if event handle is not yet created
+            }
             Shutdown();
             return;
         }
+
+        _showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowWindowEventName);
+        _ = Task.Run(() =>
+        {
+            while (_showEvent.WaitOne())
+            {
+                Dispatcher.BeginInvoke(() => ShowStatus());
+            }
+        });
 
         // Logs contain technical events only (no window titles, no keystrokes).
         Log.Logger = new LoggerConfiguration().MinimumLevel.Information()
@@ -49,6 +70,11 @@ public partial class App : System.Windows.Application
             ContextMenuStrip = BuildMenu(),
         };
         _tray.DoubleClick += (_, _) => ShowStatus();
+        _tray.BalloonTipClicked += (_, _) =>
+        {
+            if (_runtime?.AvailableUpdate is { } upd) ShowUpdatePrompt(upd);
+            else ShowChatWindow();
+        };
 
         AgentRuntime? runtime = null;
         var host = new WindowsRemoteHost(() => runtime?.RefreshPolicyNowAsync() ?? Task.CompletedTask);
@@ -59,16 +85,28 @@ public partial class App : System.Windows.Application
         {
             _window?.AddChatMessage(m);
             _chatWindow?.AddChatMessage(m);
+            if (m.FromAdmin && _chatWindow is { IsVisible: false } && _window is { IsVisible: false })
+            {
+                _tray?.ShowBalloonTip(4000, "Administrator xabari", m.Text.Length > 100 ? m.Text[..100] + "…" : m.Text, Forms.ToolTipIcon.Info);
+            }
         });
         _runtime.AdminTyping += name => Dispatcher.BeginInvoke(() =>
         {
             _window?.ShowAdminTyping(name);
             _chatWindow?.ShowAdminTyping(name);
         });
+        _runtime.UpdateAvailable += info => Dispatcher.BeginInvoke(() =>
+        {
+            _window?.ShowAvailableUpdate(info);
+            _tray?.ShowBalloonTip(5000, "KOSHI — Tizim yangilanishi", $"Yangi versiya (v{info.Version}) mavjud. Yangilash uchun bosing.", Forms.ToolTipIcon.Info);
+            ShowUpdatePrompt(info);
+        });
 
         _window.ChatSendRequested = text => _runtime!.SendChatAsync(text);
         _window.TypingTriggered = () => _runtime!.NotifyTyping();
         _window.OpenChatWindowRequested = ShowChatWindow;
+        _window.ShowUpdatePromptRequested = ShowUpdatePrompt;
+        _window.CheckUpdateRequested = () => _runtime!.CheckForUpdateNowAsync();
 
         _chatWindow.ChatSendRequested = text => _runtime!.SendChatAsync(text);
         _chatWindow.TypingTriggered = () => _runtime!.NotifyTyping();
@@ -76,7 +114,7 @@ public partial class App : System.Windows.Application
         Render(_runtime.Status);
         _runtime.Start();
 
-        if (AgentStore.LoadConfig() is null || e.Args.Contains("--show")) ShowStatus();
+        ShowStatus();
     }
 
     protected override async void OnExit(ExitEventArgs e)
@@ -89,6 +127,7 @@ public partial class App : System.Windows.Application
         }
         _loggers?.Dispose();
         await Log.CloseAndFlushAsync();
+        _showEvent?.Dispose();
         _mutex?.Dispose();
         base.OnExit(e);
     }
@@ -114,8 +153,28 @@ public partial class App : System.Windows.Application
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("KOSHI holati", null, (_, _) => ShowStatus());
         menu.Items.Add("Administrator bilan chat", null, (_, _) => ShowChatWindow());
+        menu.Items.Add("Yangilanishni tekshirish", null, async (_, _) =>
+        {
+            if (_runtime is null) return;
+            await _runtime.CheckForUpdateNowAsync();
+            if (_runtime.AvailableUpdate is { } info) Dispatcher.BeginInvoke(() => ShowUpdatePrompt(info));
+            else Dispatcher.BeginInvoke(() => ShowStatus());
+        });
         menu.Items.Add("Monitoring siyosati haqida", null, (_, _) => ShowStatus(StatusWindow.Section.Policy));
         return menu;
+    }
+
+    private void ShowUpdatePrompt(AvailableUpdateInfo info)
+    {
+        if (_runtime is null) return;
+        if (_updateWindow is { IsLoaded: true })
+        {
+            _updateWindow.Activate();
+            return;
+        }
+        _updateWindow = new UpdatePromptWindow(info, _runtime);
+        _updateWindow.Show();
+        _updateWindow.Activate();
     }
 
     private void ShowChatWindow()
@@ -124,7 +183,9 @@ public partial class App : System.Windows.Application
         if (_runtime is not null) _chatWindow.LoadHistory(_runtime.ChatHistory);
         _chatWindow.Show();
         _chatWindow.WindowState = WindowState.Normal;
+        _chatWindow.Topmost = true;
         _chatWindow.Activate();
+        _chatWindow.Topmost = false;
     }
 
     private void ShowStatus(StatusWindow.Section section = StatusWindow.Section.Status)
@@ -133,7 +194,9 @@ public partial class App : System.Windows.Application
         _window.Focus(section);
         _window.Show();
         _window.WindowState = WindowState.Normal;
+        _window.Topmost = true;
         _window.Activate();
+        _window.Topmost = false;
     }
 
     private static System.Drawing.Icon LoadTrayIcon()

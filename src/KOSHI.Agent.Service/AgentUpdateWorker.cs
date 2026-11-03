@@ -37,6 +37,9 @@ public sealed class AgentUpdateWorker(ILogger<AgentUpdateWorker> logger) : Backg
 
     private async Task CheckAsync(CancellationToken ct)
     {
+        // When the interactive tray agent is running, let the user see the update notification and click "Yangilash".
+        if (Process.GetProcessesByName("KOSHI.Agent").Length > 0) return;
+
         var config = AgentStore.LoadConfig();
         var credential = AgentStore.LoadCredential();
         if (config is null || credential is null) return;

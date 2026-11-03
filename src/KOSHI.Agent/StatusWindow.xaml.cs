@@ -18,10 +18,13 @@ public partial class StatusWindow : Window
 
     private readonly HashSet<Guid> _renderedIds = [];
     private readonly DispatcherTimer _typingTimer;
+    private AvailableUpdateInfo? _availableUpdate;
 
     public Func<string, Task<bool>>? ChatSendRequested { get; set; }
     public Action? TypingTriggered { get; set; }
     public Action? OpenChatWindowRequested { get; set; }
+    public Action<AvailableUpdateInfo>? ShowUpdatePromptRequested { get; set; }
+    public Func<Task>? CheckUpdateRequested { get; set; }
 
     public StatusWindow()
     {
@@ -33,6 +36,38 @@ public partial class StatusWindow : Window
             _typingTimer.Stop();
             TypingText.Visibility = Visibility.Collapsed;
         };
+    }
+
+    public void ShowAvailableUpdate(AvailableUpdateInfo info)
+    {
+        _availableUpdate = info;
+        UpdateBannerTitle.Text = $"Yangi versiya mavjud: v{info.Version}";
+        UpdateBannerSub.Text = $"Chiqarilgan sana: {info.BuildDate} · Yangilash uchun bosing";
+        UpdateBanner.Visibility = Visibility.Visible;
+    }
+
+    private void OnUpdateBannerClick(object sender, RoutedEventArgs e)
+    {
+        if (_availableUpdate is not null) ShowUpdatePromptRequested?.Invoke(_availableUpdate);
+    }
+
+    private async void OnCheckUpdateClick(object sender, RoutedEventArgs e)
+    {
+        if (CheckUpdateRequested is null) return;
+        CheckUpdateBtn.IsEnabled = false;
+        CheckUpdateBtn.Content = "Tekshirilmoqda…";
+        await CheckUpdateRequested();
+        CheckUpdateBtn.IsEnabled = true;
+        CheckUpdateBtn.Content = "Tekshirish";
+        if (_availableUpdate is not null)
+        {
+            ShowUpdatePromptRequested?.Invoke(_availableUpdate);
+        }
+        else
+        {
+            AutoUpdateText.Text = "Eng so‘nggi versiya o‘rnatilgan";
+            AutoUpdateText.Foreground = Brush("#047857");
+        }
     }
 
     public void AddChatMessage(ChatMessage m)
@@ -116,8 +151,11 @@ public partial class StatusWindow : Window
         MonitoringText.Text = s.MonitoringActive ? "Yoqilgan" : "To'xtatilgan";
         PolicyText.Text = s.PolicyName is null ? "standart" : $"{s.PolicyName} (v{s.PolicyVersion})";
         SyncText.Text = s.LastSync?.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss") ?? "—";
-        AutoUpdateText.Text = s.AutoUpdateEnabled ? "Yoqilgan — yangi versiya o‘zi o‘rnatiladi" : "O‘chirilgan";
-        AutoUpdateText.Foreground = Brush(s.AutoUpdateEnabled ? "#047857" : "#64748B");
+        if (_availableUpdate is null)
+        {
+            AutoUpdateText.Text = s.AutoUpdateEnabled ? "Bildirishnoma yoqilgan" : "Faqat qo‘lda";
+            AutoUpdateText.Foreground = Brush(s.AutoUpdateEnabled ? "#047857" : "#64748B");
+        }
         NoticeText.Text = s.MonitoringNotice;
         ActivateButton.Visibility = s.State is AgentState.NotActivated or AgentState.Revoked ? Visibility.Visible : Visibility.Collapsed;
     }
