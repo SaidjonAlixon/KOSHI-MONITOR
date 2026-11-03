@@ -30,8 +30,7 @@ export function LandingPage() {
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
           <Link to="/" className="flex items-center" aria-label="KOSHI bosh sahifa">
-            <KoshiIcon className="size-9" />
-            <KoshiLogo className="ml-2 h-7" />
+            <KoshiLogo className="h-8" />
           </Link>
           <nav className="hidden items-center gap-8 text-sm font-medium text-slate-600 md:flex">
             <a href="#features" className="hover:text-brand-700">Imkoniyatlar</a>
