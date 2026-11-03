@@ -31,6 +31,7 @@ public sealed class KoshiDbContext(DbContextOptions<KoshiDbContext> options) : D
     public DbSet<PolicyAssignment> PolicyAssignments => Set<PolicyAssignment>();
     public DbSet<ApplicationRule> ApplicationRules => Set<ApplicationRule>();
     public DbSet<PolicyExecutionResult> PolicyExecutionResults => Set<PolicyExecutionResult>();
+    public DbSet<SupportMessage> SupportMessages => Set<SupportMessage>();
     public DbSet<Alert> Alerts => Set<Alert>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
@@ -219,6 +220,8 @@ public sealed class KoshiDbContext(DbContextOptions<KoshiDbContext> options) : D
             e.Property(x => x.ProcessName).HasMaxLength(260).IsRequired();
             e.Property(x => x.PathPattern).HasMaxLength(400);
             e.Property(x => x.Publisher).HasMaxLength(400);
+            e.Property(x => x.PasswordSalt).HasMaxLength(64);
+            e.Property(x => x.PasswordHash).HasMaxLength(128);
             e.Property(x => x.Description).HasMaxLength(500);
             e.HasIndex(x => new { x.PolicyId, x.ProcessName }).IsUnique();
             e.HasOne(x => x.Policy).WithMany(x => x.Rules).HasForeignKey(x => x.PolicyId).OnDelete(DeleteBehavior.Cascade);
@@ -232,6 +235,14 @@ public sealed class KoshiDbContext(DbContextOptions<KoshiDbContext> options) : D
             e.HasIndex(x => new { x.PolicyId, x.PolicyVersion, x.Status });
             e.HasOne(x => x.Device).WithMany().HasForeignKey(x => x.DeviceId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Policy).WithMany().HasForeignKey(x => x.PolicyId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<SupportMessage>(e =>
+        {
+            e.Property(x => x.Text).HasMaxLength(2000).IsRequired();
+            e.Property(x => x.SenderName).HasMaxLength(120);
+            e.HasIndex(x => new { x.DeviceId, x.CreatedAt });
+            e.HasOne(x => x.Device).WithMany().HasForeignKey(x => x.DeviceId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<Alert>(e =>

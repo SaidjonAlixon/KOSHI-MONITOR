@@ -1,0 +1,26 @@
+<Window x:Class="KOSHI.Agent.Remote.AppLockWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="KOSHI — dastur qulflangan"
+        Icon="pack://application:,,,/Assets/koshi.ico"
+        Width="400" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen" Topmost="True" FontFamily="Segoe UI">
+    <StackPanel>
+        <Border Height="5" Background="{StaticResource BrandGradient}" />
+        <StackPanel Margin="24,20,24,20">
+            <StackPanel Orientation="Horizontal">
+                <Image Source="pack://application:,,,/Assets/koshi-icon.png" Width="32" Height="32" />
+                <TextBlock x:Name="TitleText" Margin="12,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold" FontSize="15" />
+            </StackPanel>
+            <TextBlock Margin="0,12,0,0" TextWrapping="Wrap" FontSize="12" Foreground="#64748B"
+                       Text="Bu dastur administrator tomonidan parol bilan himoyalangan. Davom etish uchun parolni kiriting." />
+            <PasswordBox x:Name="PasswordInput" Margin="0,12,0,0" Padding="8" FontSize="14" />
+            <TextBlock x:Name="ErrorText" Margin="0,8,0,0" Foreground="#B91C1C" FontSize="12" Visibility="Collapsed" />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                <Button Content="Bekor qilish" Padding="14,6" Margin="0,0,8,0" IsCancel="True" Click="OnCancel" />
+                <Button x:Name="OkButton" Content="Ochish" Padding="14,6" IsDefault="True" Click="OnOk"
+                        Background="#4F46E5" Foreground="White" BorderThickness="0" FontWeight="SemiBold" />
+            </StackPanel>
+        </StackPanel>
+    </StackPanel>
+</Window>

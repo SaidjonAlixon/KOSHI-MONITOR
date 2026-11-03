@@ -27,6 +27,7 @@ public interface IKoshiDbContext
     DbSet<PolicyAssignment> PolicyAssignments { get; }
     DbSet<ApplicationRule> ApplicationRules { get; }
     DbSet<PolicyExecutionResult> PolicyExecutionResults { get; }
+    DbSet<SupportMessage> SupportMessages { get; }
     DbSet<Alert> Alerts { get; }
     DbSet<AuditLog> AuditLogs { get; }
     DbSet<SystemSetting> SystemSettings { get; }

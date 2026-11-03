@@ -32,4 +32,12 @@ public sealed class AgentController(DeviceService devices, TelemetryService tele
         await policies.ReportResultAsync(User.DeviceId(), request, ct);
         return NoContent();
     }
+
+    [HttpGet("api/agent/support")]
+    public async Task<ActionResult<AgentSupportPollDto>> SupportPoll([FromServices] SupportService support, [FromQuery] DateTime? since, CancellationToken ct) =>
+        Ok(await support.PollForDeviceAsync(User.DeviceId(), since, ct));
+
+    [HttpPost("api/agent/support")]
+    public async Task<ActionResult<SupportMessageDto>> SupportSend([FromServices] SupportService support, SendSupportMessageRequest request, CancellationToken ct) =>
+        Ok(await support.SendFromDeviceAsync(User.DeviceId(), request.Text, ct));
 }

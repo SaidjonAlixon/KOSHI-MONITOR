@@ -171,7 +171,27 @@ export interface ApplicationRule {
   classification: Classification
   restriction: Restriction
   dailyLimitMinutes: number | null
+  requirePassword: boolean
   description: string | null
+}
+
+export interface SupportMessage {
+  id: string
+  deviceId: string
+  sender: 'Device' | 'Admin'
+  senderName: string | null
+  text: string
+  createdAt: string
+  readAt: string | null
+}
+
+export interface SupportThread {
+  deviceId: string
+  deviceName: string
+  employeeName: string | null
+  unreadFromDevice: number
+  lastMessageAt: string | null
+  lastMessagePreview: string | null
 }
 
 export interface PolicyAssignment {

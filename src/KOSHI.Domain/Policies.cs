@@ -88,6 +88,12 @@ public sealed class ApplicationRule
 
     /// <summary>Optional daily foreground-time limit; the agent reports a violation when exceeded.</summary>
     public int? DailyLimitMinutes { get; set; }
+
+    /// <summary>When true, the agent asks for a password before letting this app run; wrong/cancel closes it.</summary>
+    public bool RequirePassword { get; set; }
+    public string? PasswordSalt { get; set; }
+    public string? PasswordHash { get; set; }
+
     public string? Description { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }

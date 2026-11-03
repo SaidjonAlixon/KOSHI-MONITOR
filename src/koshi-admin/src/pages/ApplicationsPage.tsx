@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
-import { Field, FilterBar, Input, Modal, PageHeader, Select, defaultFilters, filtersToQuery, tableClass, tbodyClass, td, th, theadClass, type Filters } from '@/components/forms'
+import { Checkbox, Field, FilterBar, Input, Modal, PageHeader, Select, defaultFilters, filtersToQuery, tableClass, tbodyClass, td, th, theadClass, type Filters } from '@/components/forms'
 import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, LoadingState, formatDuration } from '@/components/ui'
 import { api } from '@/lib/api'
 import { Permissions, useAuth } from '@/lib/auth'
@@ -17,12 +17,14 @@ interface Draft {
   classification: Classification
   restriction: Restriction
   dailyLimitMinutes: string
+  requirePassword: boolean
+  password: string
   pathPattern: string
   publisher: string
   description: string
 }
 
-const emptyDraft = (processName = ''): Draft => ({ name: processName, processName, classification: 'Approved', restriction: 'None', dailyLimitMinutes: '', pathPattern: '', publisher: '', description: '' })
+const emptyDraft = (processName = ''): Draft => ({ name: processName, processName, classification: 'Approved', restriction: 'None', dailyLimitMinutes: '', requirePassword: false, password: '', pathPattern: '', publisher: '', description: '' })
 
 function RuleForm({ policyId, draft, onDone }: { policyId: string; draft: Draft; onDone: () => void }) {
   const qc = useQueryClient()
@@ -32,6 +34,8 @@ function RuleForm({ policyId, draft, onDone }: { policyId: string; draft: Draft;
       const body = {
         policyId, name: d.name, processName: d.processName, classification: d.classification, restriction: d.restriction,
         dailyLimitMinutes: d.restriction === 'Block' || !d.dailyLimitMinutes ? null : Number(d.dailyLimitMinutes),
+        requirePassword: d.restriction !== 'Block' && d.requirePassword,
+        password: d.password || null,
         pathPattern: d.pathPattern || null, publisher: d.publisher || null, description: d.description || null,
       }
       return d.id ? api(`/api/applications/rules/${d.id}`, { method: 'PUT', body }) : api('/api/applications/rules', { method: 'POST', body })
@@ -72,6 +76,22 @@ function RuleForm({ policyId, draft, onDone }: { policyId: string; draft: Draft;
         <Field label="Kunlik limit (daqiqa)" hint="Bo‘sh — limitsiz. Oshsa, ogohlantirish yoziladi">
           <Input type="number" min={1} max={1440} value={d.dailyLimitMinutes} onChange={(e) => set({ dailyLimitMinutes: e.target.value })} />
         </Field>
+      )}
+      {d.restriction === 'None' && (
+        <div className="sm:col-span-2">
+          <Checkbox
+            label="Parol bilan himoyalash — bu dastur ochilganda xodimdan parol so‘raladi"
+            checked={d.requirePassword}
+            onChange={(e) => set({ requirePassword: e.target.checked })}
+          />
+          {d.requirePassword && (
+            <div className="mt-2">
+              <Field label={d.id ? 'Yangi parol (bo‘sh — eskisi qoladi)' : 'Parol'} hint="Faqat admin biladigan parol. Agent uni mahalliy tekshiradi.">
+                <Input type="text" minLength={4} maxLength={128} value={d.password} onChange={(e) => set({ password: e.target.value })} placeholder="kamida 4 belgi" />
+              </Field>
+            </div>
+          )}
+        </div>
       )}
       <Field label="AppLocker yo‘l sharti (ixtiyoriy)" hint="%PROGRAMFILES%\Game\*">
         <Input maxLength={400} value={d.pathPattern} onChange={(e) => set({ pathPattern: e.target.value })} />
@@ -184,7 +204,11 @@ export function ApplicationsPage() {
                       <Badge tone={clsTone[r.classification]}>{CLASSIFICATION_LABELS[r.classification]}</Badge>
                     </td>
                     <td className={`${td} text-xs`}>
-                      {r.restriction === 'Block' ? <Badge tone="red">Bloklangan</Badge> : r.dailyLimitMinutes ? `${r.dailyLimitMinutes} daq/kun` : '—'}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {r.restriction === 'Block' ? <Badge tone="red">Bloklangan</Badge> : r.dailyLimitMinutes ? `${r.dailyLimitMinutes} daq/kun` : null}
+                        {r.requirePassword && <Badge tone="amber">Parolli qulf</Badge>}
+                        {r.restriction !== 'Block' && !r.dailyLimitMinutes && !r.requirePassword && '—'}
+                      </div>
                     </td>
                     {manage && (
                       <td className={td}>
@@ -192,7 +216,7 @@ export function ApplicationsPage() {
                           <Button
                             variant="ghost"
                             onClick={() =>
-                              setDraft({ id: r.id, name: r.name, processName: r.processName, classification: r.classification, restriction: r.restriction, dailyLimitMinutes: r.dailyLimitMinutes?.toString() ?? '', pathPattern: r.pathPattern ?? '', publisher: r.publisher ?? '', description: r.description ?? '' })
+                              setDraft({ id: r.id, name: r.name, processName: r.processName, classification: r.classification, restriction: r.restriction, dailyLimitMinutes: r.dailyLimitMinutes?.toString() ?? '', requirePassword: r.requirePassword, password: '', pathPattern: r.pathPattern ?? '', publisher: r.publisher ?? '', description: r.description ?? '' })
                             }
                           >
                             <Pencil className="size-4" />

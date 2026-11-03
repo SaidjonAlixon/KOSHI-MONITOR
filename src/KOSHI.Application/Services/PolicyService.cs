@@ -341,7 +341,8 @@ public sealed class PolicyService(IKoshiDbContext db, AuditWriter audit, ICurren
         WorkScheduleId = p.WorkScheduleId,
         WorkSchedule = p.WorkSchedule is null ? null : WorkScheduleMapping.ToDto(p.WorkSchedule),
         Rules = p.Rules.OrderBy(r => r.ProcessName).Select(r => new AgentApplicationRuleDto(r.Id, r.Name, r.ProcessName, r.PathPattern, r.Publisher,
-            (ApplicationClassificationDto)(int)r.Classification, (ApplicationRestrictionDto)(int)r.Restriction, r.DailyLimitMinutes)).ToList(),
+            (ApplicationClassificationDto)(int)r.Classification, (ApplicationRestrictionDto)(int)r.Restriction, r.DailyLimitMinutes,
+            r.RequirePassword, r.PasswordSalt, r.PasswordHash)).ToList(),
         Assignments = p.Assignments.Select(a => new PolicyAssignmentDto((PolicyAssignmentScopeDto)(int)a.Scope, a.DepartmentId, a.DeviceId)).ToList(),
     };
 
@@ -367,7 +368,8 @@ public sealed class PolicyService(IKoshiDbContext db, AuditWriter audit, ICurren
             {
                 Id = Guid.NewGuid(), PolicyId = p.Id, Name = r.Name, ProcessName = r.ProcessName, PathPattern = r.PathPattern, Publisher = r.Publisher,
                 Classification = (ApplicationClassification)(int)r.Classification, Restriction = (ApplicationRestriction)(int)r.Restriction,
-                DailyLimitMinutes = r.DailyLimitMinutes, CreatedAt = now, UpdatedAt = now,
+                DailyLimitMinutes = r.DailyLimitMinutes, RequirePassword = r.RequirePassword, PasswordSalt = r.PasswordSalt, PasswordHash = r.PasswordHash,
+                CreatedAt = now, UpdatedAt = now,
             });
     }
 
@@ -430,6 +432,18 @@ public sealed class PolicyService(IKoshiDbContext db, AuditWriter audit, ICurren
         rule.Classification = (ApplicationClassification)(int)r.Classification;
         rule.Restriction = (ApplicationRestriction)(int)r.Restriction;
         rule.DailyLimitMinutes = r.Restriction == ApplicationRestrictionDto.Block ? null : r.DailyLimitMinutes;
+        rule.RequirePassword = r.RequirePassword && r.Restriction != ApplicationRestrictionDto.Block;
+        if (!rule.RequirePassword)
+        {
+            rule.PasswordSalt = null;
+            rule.PasswordHash = null;
+        }
+        else if (!string.IsNullOrEmpty(r.Password))
+        {
+            (rule.PasswordSalt, rule.PasswordHash) = AppLockPassword.Create(r.Password);
+        }
+        if (rule.RequirePassword && string.IsNullOrEmpty(rule.PasswordHash))
+            throw Errors.Validation("Password", "Parol bilan himoyalash uchun parol kiriting.");
         rule.Description = r.Description?.Trim();
         rule.UpdatedAt = now;
     }
@@ -470,7 +484,7 @@ public sealed class PolicyService(IKoshiDbContext db, AuditWriter audit, ICurren
 
     private static ApplicationRuleDto ToDto(ApplicationRule r) => new(
         r.Id, r.PolicyId, r.Name, r.ProcessName, r.PathPattern, r.Publisher,
-        (ApplicationClassificationDto)(int)r.Classification, (ApplicationRestrictionDto)(int)r.Restriction, r.DailyLimitMinutes, r.Description);
+        (ApplicationClassificationDto)(int)r.Classification, (ApplicationRestrictionDto)(int)r.Restriction, r.DailyLimitMinutes, r.RequirePassword, r.Description);
 
     private DateTime Now => clock.GetUtcNow().UtcDateTime;
 }

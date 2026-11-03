@@ -14,12 +14,12 @@ file sealed record ReleaseInfo(string Version, string BuildDate, string FileName
 /// </summary>
 public sealed class AgentUpdateWorker(ILogger<AgentUpdateWorker> logger) : BackgroundService
 {
-    private static readonly TimeSpan CheckInterval = TimeSpan.FromHours(2);
+    private static readonly TimeSpan CheckInterval = TimeSpan.FromMinutes(2);
     private string? _attemptedVersion;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken); // let the agent settle after boot
+        await Task.Delay(TimeSpan.FromSeconds(20), stoppingToken); // let the agent settle after boot
         using var timer = new PeriodicTimer(CheckInterval);
         do
         {

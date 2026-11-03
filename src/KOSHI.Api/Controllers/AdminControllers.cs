@@ -107,6 +107,21 @@ public sealed class OrganizationController(OrganizationService org) : Controller
 }
 
 [ApiController]
+[Route("api/support")]
+[Authorize(Policy = Permissions.SupportChat)]
+public sealed class SupportController(SupportService support) : ControllerBase
+{
+    [HttpGet("threads")]
+    public async Task<ActionResult<IReadOnlyList<SupportThreadDto>>> Threads(CancellationToken ct) => Ok(await support.ThreadsAsync(ct));
+
+    [HttpGet("{deviceId:guid}")]
+    public async Task<ActionResult<IReadOnlyList<SupportMessageDto>>> History(Guid deviceId, CancellationToken ct) => Ok(await support.HistoryForAdminAsync(deviceId, ct));
+
+    [HttpPost("{deviceId:guid}")]
+    public async Task<ActionResult<SupportMessageDto>> Send(Guid deviceId, SendSupportMessageRequest request, CancellationToken ct) => Ok(await support.SendFromAdminAsync(deviceId, request.Text, ct));
+}
+
+[ApiController]
 [Route("api/alerts")]
 public sealed class AlertsController(AlertService alerts) : ControllerBase
 {

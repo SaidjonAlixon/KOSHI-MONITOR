@@ -55,11 +55,22 @@
             <TextBlock x:Name="NoticeText" Margin="0,6,0,0" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource Ink}" />
         </StackPanel>
 
-        <StackPanel x:Name="SupportSection" Margin="28,18,28,24">
-            <TextBlock Text="Texnik yordam" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource Ink}" />
-            <TextBlock x:Name="SupportText" Margin="0,6,0,0" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource Ink}" />
-            <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource Muted}"
-                       Text="Agentni rasmiy olib tashlash: Windows Sozlamalari → Ilovalar → KOSHI Agent (administrator huquqi talab qilinadi)." />
+        <StackPanel x:Name="SupportSection" Margin="28,18,28,20">
+            <TextBlock Text="Texnik yordam — administrator bilan chat" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource Ink}" />
+            <Border Margin="0,8,0,0" CornerRadius="10" BorderBrush="#E2E8F0" BorderThickness="1" Background="#F8FAFC">
+                <ScrollViewer x:Name="ChatScroll" Height="150" VerticalScrollBarVisibility="Auto" Padding="10,8">
+                    <StackPanel x:Name="ChatList" />
+                </ScrollViewer>
+            </Border>
+            <Grid Margin="0,8,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="ChatInput" Padding="8" FontSize="12" KeyDown="OnChatKeyDown" />
+                <Button Grid.Column="1" Content="Yuborish" Margin="8,0,0,0" Padding="12,0" Click="OnChatSend"
+                        Background="#4F46E5" Foreground="White" BorderThickness="0" FontWeight="SemiBold" />
+            </Grid>
         </StackPanel>
     </StackPanel>
 </Window>

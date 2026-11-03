@@ -50,9 +50,11 @@ public partial class App : System.Windows.Application
 
         AgentRuntime? runtime = null;
         var host = new WindowsRemoteHost(() => runtime?.RefreshPolicyNowAsync() ?? Task.CompletedTask);
-        runtime = new AgentRuntime(new WindowsActivitySource(), host, _loggers.CreateLogger("KOSHI.Agent"));
+        runtime = new AgentRuntime(new WindowsActivitySource(), host, new AppLockHost(), _loggers.CreateLogger("KOSHI.Agent"));
         _runtime = runtime;
         _runtime.StatusChanged += s => Dispatcher.BeginInvoke(() => Render(s));
+        _runtime.ChatReceived += m => Dispatcher.BeginInvoke(() => _window?.AddChatMessage(m));
+        if (_window is not null) _window.ChatSendRequested = text => _runtime!.SendChatAsync(text);
         Render(_runtime.Status);
         _runtime.Start();
 

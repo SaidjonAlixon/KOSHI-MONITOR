@@ -224,12 +224,9 @@ export function SettingsPage() {
         </Card>
         <Card className="xl:col-span-2">
           <CardHeader title="Agentdagi xabarlar" subtitle="Xodim tray oynasida ko‘radi" />
-          <div className="grid gap-4 p-5 lg:grid-cols-2">
+          <div className="p-5">
             <Field label="Monitoring siyosati xabari">
-              <Textarea rows={4} disabled={!editable} value={form.monitoringNotice} onChange={(e) => set({ monitoringNotice: e.target.value })} />
-            </Field>
-            <Field label="Texnik yordam kontakti">
-              <Textarea rows={4} disabled={!editable} value={form.supportContact} onChange={(e) => set({ supportContact: e.target.value })} />
+              <Textarea rows={3} disabled={!editable} value={form.monitoringNotice} onChange={(e) => set({ monitoringNotice: e.target.value })} />
             </Field>
           </div>
         </Card>

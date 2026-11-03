@@ -8,6 +8,22 @@ namespace KOSHI.Agent.Core;
 
 public enum AgentState { NotActivated, Connecting, Online, Offline, Blocked, Revoked }
 
+/// <summary>Implemented by the tray app: shows the password dialog for locked apps and terminates refused apps.</summary>
+public interface IAppLockHost
+{
+    /// <summary>Called when a password-protected app is in the foreground and not yet unlocked.
+    /// Returns true to allow it, false to close it. Verify with <see cref="AppLock.Verify"/>.</summary>
+    bool ChallengeAndEnforce(AgentApplicationRuleDto rule);
+}
+
+public static class AppLock
+{
+    public static bool Verify(AgentApplicationRuleDto rule, string typedPassword) =>
+        KOSHI.Contracts.AppLockPassword.Verify(rule.PasswordSalt, rule.PasswordHash, typedPassword);
+}
+
+public sealed record ChatMessage(Guid Id, bool FromAdmin, string? SenderName, string Text, DateTime CreatedAt);
+
 public sealed record AgentStatus(
     AgentState State,
     string? ServerUrl,
@@ -32,7 +48,10 @@ public sealed class AgentRuntime : IAsyncDisposable
 
     private readonly IActivitySource _source;
     private readonly IRemoteHost _remoteHost;
+    private readonly IAppLockHost _appLockHost;
     private readonly ILogger _logger;
+    private readonly HashSet<string> _unlockedApps = new(StringComparer.OrdinalIgnoreCase);
+    private DateTime? _chatSince;
     private readonly ActivityTracker _tracker = new();
     private readonly OfflineQueue _queue = new(AgentPaths.QueueDir);
     private readonly Dictionary<string, double> _todayForeground = new(StringComparer.OrdinalIgnoreCase);
@@ -46,19 +65,40 @@ public sealed class AgentRuntime : IAsyncDisposable
     private bool _monitoringAllowed = true;
     private DateOnly _today;
 
-    public AgentRuntime(IActivitySource source, IRemoteHost remoteHost, ILogger logger)
+    public AgentRuntime(IActivitySource source, IRemoteHost remoteHost, IAppLockHost appLockHost, ILogger logger)
     {
         _source = source;
         _remoteHost = remoteHost;
+        _appLockHost = appLockHost;
         _logger = logger;
         Status = new AgentStatus(AgentState.NotActivated, null, null, false, null, null, 0, null, DefaultNotice, "IT bo'limi", false, true);
     }
 
-    public const string DefaultNotice = "Bu korporativ kompyuter tashkilot siyosatiga muvofiq KOSHI orqali monitoring qilinadi.";
+    public const string DefaultNotice = "Korporativ kompyuter monitoringi faol.";
 
     public AgentStatus Status { get; private set; }
 
     public event Action<AgentStatus>? StatusChanged;
+
+    /// <summary>Raised for each support chat message (from admin, and echoes of the agent's own sent messages).</summary>
+    public event Action<ChatMessage>? ChatReceived;
+
+    public async Task<bool> SendChatAsync(string text)
+    {
+        if (_api is null || string.IsNullOrWhiteSpace(text)) return false;
+        try
+        {
+            var m = await _api.SendSupportAsync(text.Trim(), CancellationToken.None);
+            ChatReceived?.Invoke(new ChatMessage(m.Id, false, null, m.Text, m.CreatedAt));
+            if (m.CreatedAt > (_chatSince ?? DateTime.MinValue)) _chatSince = m.CreatedAt;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Chat send failed");
+            return false;
+        }
+    }
 
     public void Start()
     {
@@ -136,6 +176,8 @@ public sealed class AgentRuntime : IAsyncDisposable
                     lastFlush = now;
                 }
             }
+
+            EnforceAppLock();
             await Task.Delay(TimeSpan.FromSeconds(_policy?.SamplingIntervalSeconds ?? 3), ct);
         }
     }
@@ -149,6 +191,7 @@ public sealed class AgentRuntime : IAsyncDisposable
             _today = day;
             _todayForeground.Clear();
             _violationsReported.Clear();
+            _unlockedApps.Clear();
         }
         var interval = _policy?.SamplingIntervalSeconds ?? 3;
         _todayForeground[process] = _todayForeground.GetValueOrDefault(process) + interval;
@@ -159,6 +202,39 @@ public sealed class AgentRuntime : IAsyncDisposable
             _tracker.AddViolation(process, now, "blocked");
         if (rule.DailyLimitMinutes is { } limit && _todayForeground[process] > limit * 60 && _violationsReported.Add($"limit:{process}"))
             _tracker.AddViolation(process, now, "daily_limit");
+        if (rule.RequirePassword && !string.IsNullOrEmpty(rule.PasswordHash) && !_unlockedApps.Contains(process))
+            _pendingLock = rule;
+    }
+
+    private AgentApplicationRuleDto? _pendingLock;
+    private volatile bool _challengeInProgress;
+
+    /// <summary>Shows the password prompt for a locked app outside the sampling lock. Correct password unlocks for the session.</summary>
+    private void EnforceAppLock()
+    {
+        AgentApplicationRuleDto? rule;
+        lock (_gate)
+        {
+            rule = _pendingLock;
+            _pendingLock = null;
+        }
+        if (rule is null || _challengeInProgress) return;
+        _challengeInProgress = true;
+        try
+        {
+            if (_appLockHost.ChallengeAndEnforce(rule))
+                lock (_gate) _unlockedApps.Add(rule.ProcessName);
+            else
+                _tracker.AddViolation(rule.ProcessName, DateTime.UtcNow, "password_denied");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "App-lock enforcement failed");
+        }
+        finally
+        {
+            _challengeInProgress = false;
+        }
     }
 
     private async Task SyncLoop(CancellationToken ct)
@@ -201,7 +277,27 @@ public sealed class AgentRuntime : IAsyncDisposable
                 SetStatus(s => s with { State = AgentState.Offline });
             }
             SetStatus(s => s with { QueueLength = _queue.Count, RemoteChannelConnected = _remote?.State == Microsoft.AspNetCore.SignalR.Client.HubConnectionState.Connected });
+            await PollChatAsync(ct);
             await Task.Delay(TimeSpan.FromSeconds(15), ct);
+        }
+    }
+
+    private async Task PollChatAsync(CancellationToken ct)
+    {
+        if (_api is null) return;
+        try
+        {
+            var poll = await _api.PollSupportAsync(_chatSince, ct);
+            foreach (var m in poll.Messages)
+            {
+                var fromAdmin = string.Equals(m.Sender, "Admin", StringComparison.OrdinalIgnoreCase);
+                if (fromAdmin) ChatReceived?.Invoke(new ChatMessage(m.Id, true, m.SenderName, m.Text, m.CreatedAt));
+                if (m.CreatedAt > (_chatSince ?? DateTime.MinValue)) _chatSince = m.CreatedAt;
+            }
+        }
+        catch (Exception ex) when (ex is not DeviceRejectedException)
+        {
+            _logger.LogDebug(ex, "Chat poll failed");
         }
     }
 

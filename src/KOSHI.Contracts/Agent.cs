@@ -156,7 +156,10 @@ public sealed record AgentApplicationRuleDto(
     string? Publisher,
     ApplicationClassificationDto Classification,
     ApplicationRestrictionDto Restriction,
-    int? DailyLimitMinutes = null);
+    int? DailyLimitMinutes = null,
+    bool RequirePassword = false,
+    string? PasswordSalt = null,
+    string? PasswordHash = null);
 
 public sealed class PolicyResultReportRequest
 {

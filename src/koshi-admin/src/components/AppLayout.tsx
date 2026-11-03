@@ -1,5 +1,5 @@
 import {
-  Activity, AppWindow, BarChart3, Bell, FileSpreadsheet, FileText, History, LayoutDashboard, LogOut, Menu, Monitor,
+  Activity, AppWindow, BarChart3, Bell, FileSpreadsheet, FileText, History, LayoutDashboard, LogOut, Menu, MessageSquare, Monitor,
   Moon, PanelLeftClose, Search, Settings, ShieldCheck, Sun, UserCog, Users, X,
 } from 'lucide-react'
 import { useEffect, useState, type ComponentType } from 'react'
@@ -30,6 +30,7 @@ export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
       { to: '/app/devices', label: 'Qurilmalar', icon: Monitor, permission: Permissions.DevicesRead },
       { to: '/app/applications', label: 'Dasturlar boshqaruvi', icon: AppWindow, permission: Permissions.PoliciesRead },
       { to: '/app/policies', label: 'Siyosatlar', icon: ShieldCheck, permission: Permissions.PoliciesRead },
+      { to: '/app/support', label: 'Yordam chati', icon: MessageSquare, permission: Permissions.SupportChat },
     ],
   },
   {
@@ -155,7 +156,7 @@ export function AppLayout() {
           </button>
           <div className="hidden lg:block">
             <p className="text-xs text-slate-500">KOSHI Platform</p>
-            <p className="text-sm font-semibold">{current?.label ?? 'Admin panel'}</p>
+            <p className="text-sm font-semibold">{current?.label ?? 'Boshqaruv paneli'}</p>
           </div>
           <label className="relative max-w-md flex-1 lg:ml-6">
             <span className="sr-only">Qidiruv</span>

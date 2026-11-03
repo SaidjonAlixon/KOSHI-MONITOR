@@ -91,7 +91,7 @@ export function LandingPage() {
   const { user } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
   const [release, setRelease] = useState<AgentRelease | null>(null)
-  const cta = user ? { to: '/app', label: 'Admin panelga o‘tish' } : { to: '/login', label: 'Admin panelga kirish' }
+  const cta = user ? { to: '/app', label: 'Platformaga o‘tish' } : { to: '/login', label: 'Platformaga kirish' }
 
   useEffect(() => {
     document.documentElement.classList.remove('dark')
@@ -198,7 +198,7 @@ export function LandingPage() {
         <div className="mx-auto max-w-2xl text-center">
           <p className="text-sm font-semibold uppercase tracking-wider text-brand-600">Imkoniyatlar</p>
           <h2 className="mt-3 text-3xl font-bold text-slate-900 sm:text-4xl">Bitta platformada hammasi</h2>
-          <p className="mt-4 text-slate-600">Admin panelidagi har bir tugma haqiqiy API va Windows mexanizmlariga bog‘langan — maketlar emas, ishlaydigan funksiyalar.</p>
+          <p className="mt-4 text-slate-600">Platformadagi har bir tugma haqiqiy API va Windows mexanizmlariga bog‘langan — maketlar emas, ishlaydigan funksiyalar.</p>
         </div>
         <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {features.map(({ icon: Icon, title, text }) => (
@@ -217,7 +217,7 @@ export function LandingPage() {
       <section id="modules" className="scroll-mt-20 border-y border-slate-200 bg-slate-50">
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
           <div className="mx-auto max-w-2xl text-center">
-            <p className="text-sm font-semibold uppercase tracking-wider text-brand-600">Admin panel</p>
+            <p className="text-sm font-semibold uppercase tracking-wider text-brand-600">Boshqaruv paneli</p>
             <h2 className="mt-3 text-3xl font-bold text-slate-900 sm:text-4xl">13 ta boshqaruv bo‘limi</h2>
             <p className="mt-4 text-slate-600">Har bir bo‘lim rol va ruxsatlarga qarab ko‘rinadi. Ma’lumot doirasi bo‘lim darajasida cheklanishi mumkin.</p>
           </div>

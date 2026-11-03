@@ -146,7 +146,7 @@ public sealed class AgentHub(RemoteRegistry registry, IHubContext<RemoteHub> adm
 public sealed class RemoteHub(RemoteRegistry registry, IHubContext<AgentHub> agents, IServiceScopeFactory scopes) : Hub
 {
     public const string Path = "/hubs/remote";
-    private static readonly string[] InputTypes = ["move", "down", "up", "wheel", "keydown", "keyup"];
+    private static readonly string[] InputTypes = ["move", "down", "up", "wheel", "hwheel", "keydown", "keyup"];
 
     private Guid UserId => Context.User!.UserId();
     private string Email => Context.User!.FindFirstValue(ClaimTypes.Email) ?? Context.User!.FindFirstValue("email") ?? "admin";

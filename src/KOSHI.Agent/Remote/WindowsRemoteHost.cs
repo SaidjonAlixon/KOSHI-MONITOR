@@ -89,7 +89,10 @@ public sealed partial class WindowsRemoteHost(Func<Task> refreshPolicy) : IRemot
                 Mouse(input.X, input.Y, MouseMove | MouseAbsolute | flag, 0);
                 break;
             case "wheel":
-                Mouse(input.X, input.Y, MouseWheel, -Math.Sign(input.Delta) * 120);
+            case "hwheel":
+                // Windows delivers the wheel to the window under the cursor, so move there first.
+                Mouse(input.X, input.Y, MouseMove | MouseAbsolute, 0);
+                Mouse(input.X, input.Y, input.Type == "wheel" ? MouseWheel : MouseHWheel, WheelData(input.Type == "wheel" ? -input.Delta : input.Delta));
                 break;
             case "keydown":
             case "keyup":
@@ -172,7 +175,14 @@ public sealed partial class WindowsRemoteHost(Func<Task> refreshPolicy) : IRemot
 
     private const uint InputMouse = 0, InputKeyboard = 1;
     private const uint MouseMove = 0x0001, MouseLeftDown = 0x0002, MouseLeftUp = 0x0004, MouseRightDown = 0x0008, MouseRightUp = 0x0010,
-        MouseMiddleDown = 0x0020, MouseMiddleUp = 0x0040, MouseWheel = 0x0800, MouseAbsolute = 0x8000;
+        MouseMiddleDown = 0x0020, MouseMiddleUp = 0x0040, MouseWheel = 0x0800, MouseHWheel = 0x1000, MouseAbsolute = 0x8000;
+
+    /// <summary>Browser pixel delta → Windows wheel units (120 = one notch); sub-notch values give smooth scrolling.</summary>
+    private static int WheelData(double delta)
+    {
+        var data = (int)Math.Round(Math.Clamp(delta * 1.2, -1200, 1200));
+        return data == 0 ? Math.Sign(delta) * 120 : data;
+    }
     private const uint KeyUp = 0x0002, KeyExtended = 0x0001;
     private static readonly HashSet<ushort> ExtendedKeys = [0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x2D, 0x2E, 0x5B, 0x5C, 0x5D, 0x6F, 0x90];
 

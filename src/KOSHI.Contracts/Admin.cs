@@ -278,6 +278,7 @@ public sealed record ApplicationRuleDto(
     ApplicationClassificationDto Classification,
     ApplicationRestrictionDto Restriction,
     int? DailyLimitMinutes,
+    bool RequirePassword,
     string? Description);
 
 public sealed class UpsertApplicationRuleRequest
@@ -303,9 +304,30 @@ public sealed class UpsertApplicationRuleRequest
     [Range(1, 1440)]
     public int? DailyLimitMinutes { get; set; }
 
+    /// <summary>Require a password to open this app on the agent.</summary>
+    public bool RequirePassword { get; set; }
+
+    /// <summary>New password to set (plaintext). Leave null to keep the existing one.</summary>
+    [StringLength(128, MinimumLength = 4)]
+    public string? Password { get; set; }
+
     [StringLength(500)]
     public string? Description { get; set; }
 }
+
+// ---------- Support chat ----------
+
+public sealed record SupportMessageDto(Guid Id, Guid DeviceId, string Sender, string? SenderName, string Text, DateTime CreatedAt, DateTime? ReadAt);
+
+public sealed class SendSupportMessageRequest
+{
+    [Required, StringLength(2000, MinimumLength = 1)]
+    public string Text { get; set; } = string.Empty;
+}
+
+public sealed record SupportThreadDto(Guid DeviceId, string DeviceName, string? EmployeeName, int UnreadFromDevice, DateTime? LastMessageAt, string? LastMessagePreview);
+
+public sealed record AgentSupportPollDto(IReadOnlyList<SupportMessageDto> Messages, DateTime ServerTime);
 
 public sealed record ApplicationSummaryDto(
     string ProcessName,
@@ -575,7 +597,7 @@ public sealed class UpdateSystemSettingsRequest
     [Required, StringLength(2000, MinimumLength = 10)]
     public string MonitoringNotice { get; set; } = string.Empty;
 
-    [Required, StringLength(500, MinimumLength = 3)]
+    [StringLength(500)]
     public string SupportContact { get; set; } = string.Empty;
 
     [Range(0, 1)]

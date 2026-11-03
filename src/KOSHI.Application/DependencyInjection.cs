@@ -28,6 +28,7 @@ public static class DependencyInjection
         services.AddScoped<AlertService>();
         services.AddScoped<OrganizationService>();
         services.AddScoped<MaintenanceService>();
+        services.AddScoped<SupportService>();
         return services;
     }
 }

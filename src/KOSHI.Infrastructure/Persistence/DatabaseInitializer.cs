@@ -43,14 +43,35 @@ public sealed class DatabaseInitializer(
         }
 
         var now = clock.GetUtcNow().UtcDateTime;
-        var unseededRoles = await db.Roles.Where(r => r.IsSystem && r.Permissions.Count == 0).ToListAsync(ct);
-        foreach (var role in unseededRoles)
+        var systemRoles = await db.Roles.Where(r => r.IsSystem).ToListAsync(ct);
+        var rolesChanged = false;
+        foreach (var role in systemRoles)
         {
             if (!Permissions.Defaults.TryGetValue(role.Name, out var defaults)) continue;
-            role.Permissions = [.. defaults];
-            role.UpdatedAt = now;
+            if (role.Permissions.Count == 0 || role.Name == RoleNames.SuperAdmin)
+            {
+                if (!role.Permissions.SequenceEqual(defaults))
+                {
+                    role.Permissions = [.. defaults];
+                    role.UpdatedAt = now;
+                    rolesChanged = true;
+                }
+            }
+            else if (defaults.Contains(Permissions.SupportChat) && !role.Permissions.Contains(Permissions.SupportChat))
+            {
+                role.Permissions = [.. role.Permissions, Permissions.SupportChat];
+                role.UpdatedAt = now;
+                rolesChanged = true;
+            }
         }
-        if (unseededRoles.Count > 0) await db.SaveChangesAsync(ct);
+        if (rolesChanged) await db.SaveChangesAsync(ct);
+
+        var legacySupport = await db.SystemSettings.FirstOrDefaultAsync(s => s.Key == SettingsService.Keys.SupportContact && s.Value.Contains("example.com"), ct);
+        if (legacySupport is not null)
+        {
+            db.SystemSettings.Remove(legacySupport);
+            await db.SaveChangesAsync(ct);
+        }
 
         if (!await db.WorkSchedules.AnyAsync(ct))
         {

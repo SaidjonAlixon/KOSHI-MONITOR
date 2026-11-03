@@ -35,8 +35,12 @@ foreach ($exe in "artifacts\agent\KOSHI.Agent.exe", "artifacts\service\KOSHI.Age
 }
 
 Write-Host "Compiling installer..."
-& $iscc "/DAppVersion=$Version" deploy\installer\koshi-agent.iss
-if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
+for ($attempt = 1; $attempt -le 3; $attempt++) {
+    & $iscc "/DAppVersion=$Version" deploy\installer\koshi-agent.iss
+    if ($LASTEXITCODE -eq 0) { break }
+    if ($attempt -eq 3) { throw "ISCC failed" }
+    Start-Sleep -Seconds 2
+}
 
 $setup = Get-Item "artifacts\installer\KOSHI-Agent-Setup-$Version.exe"
 $sha = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash

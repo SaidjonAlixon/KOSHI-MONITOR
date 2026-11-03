@@ -1,9 +1,14 @@
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using KOSHI.Agent.Core;
 using Color = System.Windows.Media.Color;
 using ColorConverter = System.Windows.Media.ColorConverter;
+using HorizontalAlignment = System.Windows.HorizontalAlignment;
+using KeyEventArgs = System.Windows.Input.KeyEventArgs;
+using TextBox = System.Windows.Controls.TextBox;
 
 namespace KOSHI.Agent;
 
@@ -11,10 +16,51 @@ public partial class StatusWindow : Window
 {
     public enum Section { Status, Policy, Support }
 
+    public Func<string, Task<bool>>? ChatSendRequested { get; set; }
+
     public StatusWindow()
     {
         InitializeComponent();
         VersionText.Text = AgentInfo.VersionWithDate;
+    }
+
+    public void AddChatMessage(ChatMessage m)
+    {
+        var bubble = new Border
+        {
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(10, 6, 10, 6),
+            Margin = new Thickness(0, 0, 0, 6),
+            MaxWidth = 300,
+            HorizontalAlignment = m.FromAdmin ? HorizontalAlignment.Left : HorizontalAlignment.Right,
+            Background = Brush(m.FromAdmin ? "#EEF1FF" : "#4F46E5"),
+        };
+        var panel = new StackPanel();
+        if (m.FromAdmin && !string.IsNullOrWhiteSpace(m.SenderName))
+            panel.Children.Add(new TextBlock { Text = m.SenderName, FontSize = 10, FontWeight = FontWeights.SemiBold, Foreground = Brush("#4338CA") });
+        panel.Children.Add(new TextBlock { Text = m.Text, TextWrapping = TextWrapping.Wrap, FontSize = 12, Foreground = Brush(m.FromAdmin ? "#0B1226" : "#FFFFFF") });
+        panel.Children.Add(new TextBlock { Text = m.CreatedAt.ToLocalTime().ToString("HH:mm"), FontSize = 9, Foreground = Brush(m.FromAdmin ? "#94A3B8" : "#C7D2FE"), HorizontalAlignment = HorizontalAlignment.Right });
+        bubble.Child = panel;
+        ChatList.Children.Add(bubble);
+        ChatScroll.ScrollToEnd();
+    }
+
+    private async void OnChatSend(object sender, RoutedEventArgs e) => await SendChatAsync();
+
+    private async void OnChatKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter) { e.Handled = true; await SendChatAsync(); }
+    }
+
+    private async Task SendChatAsync()
+    {
+        var text = ChatInput.Text.Trim();
+        if (text.Length == 0 || ChatSendRequested is null) return;
+        ChatInput.IsEnabled = false;
+        var ok = await ChatSendRequested(text);
+        ChatInput.IsEnabled = true;
+        if (ok) ChatInput.Clear();
+        ChatInput.Focus();
     }
 
     public void Render(AgentStatus s)
@@ -42,7 +88,6 @@ public partial class StatusWindow : Window
         AutoUpdateText.Text = s.AutoUpdateEnabled ? "Yoqilgan — yangi versiya o‘zi o‘rnatiladi" : "O‘chirilgan";
         AutoUpdateText.Foreground = Brush(s.AutoUpdateEnabled ? "#047857" : "#64748B");
         NoticeText.Text = s.MonitoringNotice;
-        SupportText.Text = s.SupportContact;
         ActivateButton.Visibility = s.State is AgentState.NotActivated or AgentState.Revoked ? Visibility.Visible : Visibility.Collapsed;
     }
 

@@ -152,6 +152,36 @@ export function RemotePage() {
     void connRef.current.send('Input', sid, { type, x, y, button: extra.button ?? 0, delta: extra.delta ?? 0, keyCode: extra.keyCode ?? 0 })
   }
 
+  const sendRef = useRef(send)
+  sendRef.current = send
+  const wheelRef = useRef({ dx: 0, dy: 0, timer: 0 as number | 0, last: null as WheelEvent | null })
+
+  // React's onWheel is passive (can't stop the page from scrolling), so attach a native listener.
+  useEffect(() => {
+    const c = canvasRef.current
+    if (!c) return
+    const onWheel = (ev: globalThis.WheelEvent) => {
+      if (!controlEnabled || !sessionRef.current) return
+      ev.preventDefault()
+      const unit = ev.deltaMode === 1 ? 40 : ev.deltaMode === 2 ? 800 : 1
+      const w = wheelRef.current
+      w.dx += (ev.shiftKey && !ev.deltaX ? ev.deltaY : ev.deltaX) * unit
+      w.dy += (ev.shiftKey && !ev.deltaX ? 0 : ev.deltaY) * unit
+      w.last = ev as unknown as WheelEvent
+      if (w.timer) return
+      w.timer = window.setTimeout(() => {
+        w.timer = 0
+        const e = w.last as unknown as WheelEvent<HTMLCanvasElement>
+        if (Math.abs(w.dy) >= 1) sendRef.current('wheel', e, { delta: Math.round(w.dy) })
+        if (Math.abs(w.dx) >= 1) sendRef.current('hwheel', e, { delta: Math.round(w.dx) })
+        w.dx = 0
+        w.dy = 0
+      }, 30)
+    }
+    c.addEventListener('wheel', onWheel, { passive: false })
+    return () => c.removeEventListener('wheel', onWheel)
+  }, [controlEnabled])
+
   const onMove = (e: MouseEvent<HTMLCanvasElement>) => {
     const now = performance.now()
     if (now - lastMoveRef.current < 40) return
@@ -249,7 +279,6 @@ export function RemotePage() {
             onMouseMove={onMove}
             onMouseDown={(e) => send('down', e, { button: e.button })}
             onMouseUp={(e) => send('up', e, { button: e.button })}
-            onWheel={(e) => send('wheel', e, { delta: e.deltaY })}
             onContextMenu={(e) => e.preventDefault()}
             onKeyDown={onKey('keydown')}
             onKeyUp={onKey('keyup')}

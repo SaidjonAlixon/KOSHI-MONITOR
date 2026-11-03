@@ -27,6 +27,7 @@ public static class Permissions
     public const string UsersManage = "users.manage";
     public const string SettingsRead = "settings.read";
     public const string SettingsManage = "settings.manage";
+    public const string SupportChat = "support.chat";
 
     /// <summary>Remote screen control and remote commands (lock, message, restart...). Always visible to the employee and audited.</summary>
     public const string RemoteControl = "remote.control";
@@ -41,7 +42,7 @@ public static class Permissions
     [
         DashboardRead, DevicesRead, DevicesManage, MonitoringRead, MonitoringLive, PoliciesRead, PoliciesManage,
         ReportsRead, ReportsIndividual, ReportsExport, EmployeesRead, EmployeesManage, AuditRead, AlertsRead,
-        AlertsManage, UsersManage, SettingsRead, SettingsManage, RemoteControl, DataUnscoped, RolesManage,
+        AlertsManage, UsersManage, SettingsRead, SettingsManage, SupportChat, RemoteControl, DataUnscoped, RolesManage,
     ];
 
     public static readonly IReadOnlySet<string> NonAssignable = new HashSet<string>(StringComparer.Ordinal) { RolesManage };
@@ -56,11 +57,11 @@ public static class Permissions
             [
                 DashboardRead, DevicesRead, DevicesManage, MonitoringRead, MonitoringLive, PoliciesRead,
                 PoliciesManage, ReportsRead, ReportsIndividual, ReportsExport, EmployeesRead, AuditRead,
-                AlertsRead, AlertsManage, SettingsRead, RemoteControl, DataUnscoped,
+                AlertsRead, AlertsManage, SettingsRead, SupportChat, RemoteControl, DataUnscoped,
             ],
             [RoleNames.HRManager] =
             [
-                DashboardRead, ReportsRead, ReportsIndividual, ReportsExport, EmployeesRead, EmployeesManage,
+                DashboardRead, ReportsRead, ReportsIndividual, ReportsExport, EmployeesRead, EmployeesManage, SupportChat,
             ],
             [RoleNames.Viewer] = [DashboardRead, ReportsRead],
         };
