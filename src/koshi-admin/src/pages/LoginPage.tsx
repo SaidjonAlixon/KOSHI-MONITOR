@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Lock, Mail, ShieldCheck } from 'lucide-react'
+import { Eye, EyeOff, Lock, Mail, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Navigate, useLocation, useNavigate } from 'react-router'
@@ -21,6 +21,7 @@ export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const [serverError, setServerError] = useState<string | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
   const { register, handleSubmit, formState } = useForm<FormValues>({ resolver: zodResolver(schema) })
 
   if (user) return <Navigate to="/app" replace />
@@ -78,12 +79,21 @@ export function LoginPage() {
                 <Lock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
                 <input
                   id="password"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   autoComplete="current-password"
                   {...register('password')}
                   aria-invalid={!!formState.errors.password}
-                  className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
+                  className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-10 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  aria-label={showPassword ? 'Parolni yashirish' : 'Parolni ko‘rsatish'}
+                  title={showPassword ? 'Parolni yashirish' : 'Parolni ko‘rsatish'}
+                >
+                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
               </div>
               {formState.errors.password && <p className="mt-1 text-xs text-rose-600">{formState.errors.password.message}</p>}
             </div>
