@@ -318,4 +318,5 @@ export interface SystemSettings {
   scheduleAdherenceWeight: number
   reportedActivityWeight: number
   minimumCoverage: number
+  agentAutoUpdate: boolean
 }

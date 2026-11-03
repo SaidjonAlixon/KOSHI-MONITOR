@@ -136,6 +136,22 @@ export function SettingsPage() {
           </div>
         </Card>
         <Card className="xl:col-span-2">
+          <CardHeader title="Agent yangilanishi" subtitle="Yangi versiya chiqqanda ishlab turgan agent uni o‘zi yuklab o‘rnatadi" />
+          <div className="p-5">
+            <Checkbox
+              label={
+                <span>
+                  <span className="font-medium">Avtomatik yangilanishga ruxsat berish</span>
+                  <span className="block text-xs text-slate-500">Yoqilsa, agent yangi versiyani yuklab, SHA-256 ni tekshirib, jim o‘rnatadi. Aktivatsiya saqlanadi. O‘chirilsa, yangilanish faqat qo‘lda o‘rnatiladi.</span>
+                </span>
+              }
+              disabled={!editable}
+              checked={form.agentAutoUpdate}
+              onChange={(e) => set({ agentAutoUpdate: e.target.checked })}
+            />
+          </div>
+        </Card>
+        <Card className="xl:col-span-2">
           <CardHeader title="Agentdagi xabarlar" subtitle="Xodim tray oynasida ko‘radi" />
           <div className="grid gap-4 p-5 lg:grid-cols-2">
             <Field label="Monitoring siyosati xabari">

@@ -41,13 +41,15 @@ if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
 $setup = Get-Item "artifacts\installer\KOSHI-Agent-Setup-$Version.exe"
 $sha = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash
 # Metadata served next to the installer so the site can show the exact version and build date.
-[ordered]@{
+$latestJson = [ordered]@{
     version   = $Version
     buildDate = $buildDate
     fileName  = $setup.Name
     size      = $setup.Length
     sha256    = $sha
-} | ConvertTo-Json | Set-Content -Encoding UTF8 "artifacts\installer\latest.json"
+} | ConvertTo-Json
+# Write without BOM so strict JSON parsers (agent) accept it.
+[System.IO.File]::WriteAllText((Join-Path $root "artifacts\installer\latest.json"), $latestJson, (New-Object System.Text.UTF8Encoding $false))
 Write-Host ("Installer: {0} ({1:N1} MB)" -f $setup.FullName, ($setup.Length / 1MB))
 Write-Host ("Version: {0}  BuildDate: {1}" -f $Version, $buildDate)
 Write-Host ("SHA256: {0}" -f $sha)

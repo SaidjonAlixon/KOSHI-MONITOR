@@ -133,6 +133,7 @@ public sealed record AgentPolicyDto(
     WindowTitleCaptureDto WindowTitleCapture,
     bool TrackBackgroundProcesses,
     bool ScreenshotsEnabled,
+    bool AutoUpdateEnabled,
     WorkScheduleDto? WorkSchedule,
     IReadOnlyList<AgentApplicationRuleDto> Rules,
     string MonitoringNotice,

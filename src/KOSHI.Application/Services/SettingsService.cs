@@ -23,6 +23,7 @@ public sealed class SettingsService(IKoshiDbContext db, AuditWriter audit, ICurr
         public const string ScheduleAdherenceWeight = "productivity.scheduleAdherenceWeight";
         public const string ReportedActivityWeight = "productivity.reportedActivityWeight";
         public const string MinimumCoverage = "productivity.minimumCoverage";
+        public const string AgentAutoUpdate = "agent.autoUpdate";
     }
 
     public static readonly SystemSettingsDto Defaults = new(
@@ -36,7 +37,8 @@ public sealed class SettingsService(IKoshiDbContext db, AuditWriter audit, ICurr
         ApprovedUsageWeight: 0.5,
         ScheduleAdherenceWeight: 0.3,
         ReportedActivityWeight: 0.2,
-        MinimumCoverage: 0.5);
+        MinimumCoverage: 0.5,
+        AgentAutoUpdate: true);
 
     public async Task<SystemSettingsDto> GetAsync(CancellationToken ct = default)
     {
@@ -53,7 +55,8 @@ public sealed class SettingsService(IKoshiDbContext db, AuditWriter audit, ICurr
             Dbl(map, Keys.ApprovedUsageWeight, d.ApprovedUsageWeight),
             Dbl(map, Keys.ScheduleAdherenceWeight, d.ScheduleAdherenceWeight),
             Dbl(map, Keys.ReportedActivityWeight, d.ReportedActivityWeight),
-            Dbl(map, Keys.MinimumCoverage, d.MinimumCoverage));
+            Dbl(map, Keys.MinimumCoverage, d.MinimumCoverage),
+            Bool(map, Keys.AgentAutoUpdate, d.AgentAutoUpdate));
     }
 
     public async Task<SystemSettingsDto> UpdateAsync(UpdateSystemSettingsRequest r, CancellationToken ct = default)
@@ -79,6 +82,7 @@ public sealed class SettingsService(IKoshiDbContext db, AuditWriter audit, ICurr
             [Keys.ScheduleAdherenceWeight] = r.ScheduleAdherenceWeight.ToString(CultureInfo.InvariantCulture),
             [Keys.ReportedActivityWeight] = r.ReportedActivityWeight.ToString(CultureInfo.InvariantCulture),
             [Keys.MinimumCoverage] = r.MinimumCoverage.ToString(CultureInfo.InvariantCulture),
+            [Keys.AgentAutoUpdate] = r.AgentAutoUpdate ? "true" : "false",
         };
 
         var existing = await db.SystemSettings.ToDictionaryAsync(s => s.Key, ct);
@@ -110,6 +114,9 @@ public sealed class SettingsService(IKoshiDbContext db, AuditWriter audit, ICurr
 
     private static double Dbl(Dictionary<string, string> m, string k, double d) =>
         m.TryGetValue(k, out var v) && double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out var x) ? x : d;
+
+    private static bool Bool(Dictionary<string, string> m, string k, bool d) =>
+        m.TryGetValue(k, out var v) ? v == "true" : d;
 
     private static string Str(Dictionary<string, string> m, string k, string d) =>
         m.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v) ? v : d;

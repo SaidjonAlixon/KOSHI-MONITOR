@@ -552,7 +552,8 @@ public sealed record SystemSettingsDto(
     double ApprovedUsageWeight,
     double ScheduleAdherenceWeight,
     double ReportedActivityWeight,
-    double MinimumCoverage);
+    double MinimumCoverage,
+    bool AgentAutoUpdate);
 
 public sealed class UpdateSystemSettingsRequest
 {
@@ -588,6 +589,9 @@ public sealed class UpdateSystemSettingsRequest
 
     [Range(0, 1)]
     public double MinimumCoverage { get; set; } = 0.5;
+
+    /// <summary>Allow agents to download and install newer versions automatically.</summary>
+    public bool AgentAutoUpdate { get; set; } = true;
 }
 
 public sealed record DashboardSummaryDto(

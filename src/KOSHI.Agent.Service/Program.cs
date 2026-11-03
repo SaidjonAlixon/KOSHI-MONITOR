@@ -14,6 +14,7 @@ builder.Services.AddWindowsService(o => o.ServiceName = "KOSHIAgentService");
 builder.Services.AddSerilog();
 builder.Services.AddHostedService<PolicyEnforcementWorker>();
 builder.Services.AddHostedService<SessionAgentWatchdog>();
+builder.Services.AddHostedService<AgentUpdateWorker>();
 
 var host = builder.Build();
 await host.RunAsync();

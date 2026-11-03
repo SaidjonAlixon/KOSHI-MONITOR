@@ -219,6 +219,7 @@ public sealed class PolicyService(IKoshiDbContext db, AuditWriter audit, ICurren
             snap?.WindowTitleCapture ?? WindowTitleCaptureDto.None,
             snap?.TrackBackgroundProcesses ?? false,
             ScreenshotsEnabled: false,
+            s.AgentAutoUpdate,
             schedule,
             snap?.Rules ?? [],
             s.MonitoringNotice,
