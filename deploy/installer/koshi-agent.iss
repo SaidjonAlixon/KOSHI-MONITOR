@@ -37,8 +37,8 @@ VersionInfoDescription=KOSHI corporate monitoring agent installer
 Name: "en"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-Source: "..\..\artifacts\agent\*"; DestDir: "{app}\agent"; Flags: recursesubdirs ignoreversion
-Source: "..\..\artifacts\service\*"; DestDir: "{app}\service"; Flags: recursesubdirs ignoreversion
+Source: "..\..\artifacts\agent\*"; DestDir: "{app}\agent"; Flags: recursesubdirs ignoreversion restartreplace
+Source: "..\..\artifacts\service\*"; DestDir: "{app}\service"; Flags: recursesubdirs ignoreversion restartreplace
 
 [Icons]
 Name: "{commondesktop}\KOSHI Agent"; Filename: "{app}\agent\KOSHI.Agent.exe"; Parameters: "--show"; IconFilename: "{app}\agent\KOSHI.Agent.exe"
@@ -114,16 +114,18 @@ var
   Code: Integer;
   I: Integer;
 begin
-  { Upgrade: the running service opens an upgrade window when it sees this setup, then we can stop it and replace files. }
-  for I := 1 to 25 do
+  { Give UninstallGuard ~1s to see this KOSHI-Agent-Setup process and open UpgradeGate. }
+  Sleep(1200);
+  for I := 1 to 40 do
   begin
-    Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM KOSHI.Agent.exe', '', SW_HIDE, ewWaitUntilTerminated, Code);
+    Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM KOSHI.Agent.exe /T', '', SW_HIDE, ewWaitUntilTerminated, Code);
+    Exec(ExpandConstant('{sys}\net.exe'), 'stop {#ServiceName}', '', SW_HIDE, ewWaitUntilTerminated, Code);
     Exec(ExpandConstant('{sys}\sc.exe'), 'stop {#ServiceName}', '', SW_HIDE, ewWaitUntilTerminated, Code);
     { 1060 = service does not exist (fresh install); 1062 = already stopped. }
     if (Code = 1060) or (Code = 1062) then break;
-    Sleep(400);
+    Sleep(500);
   end;
-  Sleep(400);
+  Sleep(800);
   Result := '';
 end;
 

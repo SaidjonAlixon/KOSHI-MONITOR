@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Runtime.Versioning;
-using System.Security.Cryptography;
 using System.Text.Json;
 using KOSHI.Agent.Core.Remote;
 using KOSHI.Agent.Core.Windows;
@@ -559,48 +558,23 @@ public sealed class AgentRuntime : IAsyncDisposable
         if (_config is null) return (false, "Server manzili sozlanmagan.");
         try
         {
+            await GatePipe.SendAsync(new GateRequest { Op = GatePipe.OpPrepareUpgrade }, TimeSpan.FromSeconds(3), ct);
+            AgentSelfUpdate.ReleaseStale(release.Version);
+
             var baseUri = new Uri(_config.ServerUrl.TrimEnd('/') + "/");
             using var http = new HttpClient { BaseAddress = baseUri, Timeout = TimeSpan.FromMinutes(10) };
-            var temp = Path.Combine(Path.GetTempPath(), $"KOSHI-Agent-Setup-{release.Version}.exe");
+            var temp = AgentSelfUpdate.NewTempPath(release.Version);
+            await AgentSelfUpdate.DownloadAsync(http, temp, release.FileName, release.Size, progress, ct);
 
-            var resp = await http.GetAsync("api/agent/release/download", HttpCompletionOption.ResponseHeadersRead, ct);
-            if (!resp.IsSuccessStatusCode)
+            if (!await AgentSelfUpdate.ShaMatchesAsync(temp, release.Sha256, ct))
             {
-                resp.Dispose();
-                var fileName = Path.GetFileName(release.FileName);
-                resp = await http.GetAsync($"downloads/{Uri.EscapeDataString(fileName)}", HttpCompletionOption.ResponseHeadersRead, ct);
-            }
-
-            using (resp)
-            {
-                if (!resp.IsSuccessStatusCode) return (false, $"Yuklab bo‘lmadi (HTTP {(int)resp.StatusCode}).");
-                var total = resp.Content.Headers.ContentLength ?? release.Size;
-                await using var input = await resp.Content.ReadAsStreamAsync(ct);
-                await using var fs = File.Create(temp);
-                var buffer = new byte[81920];
-                long readTotal = 0;
-                int read;
-                while ((read = await input.ReadAsync(buffer, ct)) > 0)
-                {
-                    await fs.WriteAsync(buffer.AsMemory(0, read), ct);
-                    readTotal += read;
-                    if (total > 0) progress?.Report((int)Math.Clamp(readTotal * 100 / total, 1, 99));
-                }
-            }
-
-            if (!string.IsNullOrWhiteSpace(release.Sha256))
-            {
-                await using var verifyStream = File.OpenRead(temp);
-                var actual = Convert.ToHexString(await SHA256.HashDataAsync(verifyStream, ct));
-                if (!actual.Equals(release.Sha256, StringComparison.OrdinalIgnoreCase))
-                {
-                    File.Delete(temp);
-                    return (false, "Yuklangan fayl xesh summasi (SHA-256) mos kelmadi.");
-                }
+                try { File.Delete(temp); } catch (IOException) { }
+                return (false, "Yuklangan fayl xesh summasi (SHA-256) mos kelmadi.");
             }
 
             progress?.Report(100);
-            Process.Start(new ProcessStartInfo(temp, "/SILENT /NORESTART /SUPPRESSMSGBOXES") { UseShellExecute = true });
+            await GatePipe.SendAsync(new GateRequest { Op = GatePipe.OpPrepareUpgrade }, TimeSpan.FromSeconds(3), ct);
+            AgentSelfUpdate.Launch(temp);
             return (true, "Yangilanish o‘rnatilmoqda…");
         }
         catch (Exception ex)

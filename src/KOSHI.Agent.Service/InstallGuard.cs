@@ -1,10 +1,8 @@
 using System.Diagnostics;
 using System.IO.Pipes;
-using System.Net.Http.Json;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Security.AccessControl;
-using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
@@ -49,8 +47,6 @@ public sealed partial class InstallGuard(PolicyState state, ILogger<InstallGuard
     private readonly Dictionary<Guid, PendingInstall> _pending = [];
     private readonly Dictionary<string, bool> _installerCache = new(StringComparer.OrdinalIgnoreCase);
     private bool _firstScan = true;
-    private string? _koshiReleaseSha;
-    private DateTime _koshiReleaseShaAt = DateTime.MinValue;
 
     private sealed class PendingInstall
     {
@@ -83,7 +79,6 @@ public sealed partial class InstallGuard(PolicyState state, ILogger<InstallGuard
                     await Task.Delay(1000, ct);
                     continue;
                 }
-                await RefreshKoshiReleaseShaAsync(ct);
                 Scan();
                 ExpirePending();
             }
@@ -163,13 +158,16 @@ public sealed partial class InstallGuard(PolicyState state, ILogger<InstallGuard
 
         var name = p.ProcessName;
         var path = Native.ImagePath(pid);
-        if (!IsInstaller(name, path, out var description)) return;
 
-        if (IsTrustedKoshiSetup(name, path))
+        // Never freeze or password-gate KOSHI's own updater — that would break version upgrades.
+        if (AgentSelfUpdate.IsSetupProcess(name) || IsTrustedKoshiSetup(name, path))
         {
             lock (_gate) _approved.Add(pid);
+            UpgradeGate.Enter(TimeSpan.FromMinutes(15));
             return;
         }
+
+        if (!IsInstaller(name, path, out var description)) return;
 
         Native.Suspend(pid);
         var pending = new PendingInstall
@@ -244,32 +242,20 @@ public sealed partial class InstallGuard(PolicyState state, ILogger<InstallGuard
     /// <summary>KOSHI's own updater (started by the tray) is allowed when its SHA-256 matches the published release.</summary>
     private bool IsTrustedKoshiSetup(string name, string? path)
     {
-        if (path is null || _koshiReleaseSha is null || !name.StartsWith("KOSHI-Agent-Setup", StringComparison.OrdinalIgnoreCase)) return false;
+        if (AgentSelfUpdate.IsSetupProcess(name)) return true;
+        if (path is null) return false;
         try
         {
-            using var fs = File.OpenRead(path);
-            return Convert.ToHexString(SHA256.HashData(fs)).Equals(_koshiReleaseSha, StringComparison.OrdinalIgnoreCase);
+            var file = Path.GetFileName(path);
+            if (file.StartsWith(AgentSelfUpdate.SetupPrefix, StringComparison.OrdinalIgnoreCase)) return true;
+            var vi = FileVersionInfo.GetVersionInfo(path);
+            var meta = string.Join(' ', vi.ProductName, vi.FileDescription, vi.OriginalFilename, vi.CompanyName);
+            return meta.Contains("KOSHI", StringComparison.OrdinalIgnoreCase)
+                   && meta.Contains("setup", StringComparison.OrdinalIgnoreCase);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FileNotFoundException)
         {
-            return false;
-        }
-    }
-
-    private async Task RefreshKoshiReleaseShaAsync(CancellationToken ct)
-    {
-        if (DateTime.UtcNow - _koshiReleaseShaAt < TimeSpan.FromMinutes(10)) return;
-        _koshiReleaseShaAt = DateTime.UtcNow;
-        var config = AgentStore.LoadConfig();
-        if (config is null) return;
-        try
-        {
-            using var http = new HttpClient { BaseAddress = new Uri(config.ServerUrl.TrimEnd('/') + "/"), Timeout = TimeSpan.FromSeconds(15) };
-            var release = await http.GetFromJsonAsync<AgentReleaseDto>("api/agent/release/latest.json", KoshiApiClient.Json, ct);
-            if (!string.IsNullOrWhiteSpace(release?.Sha256)) _koshiReleaseSha = release.Sha256;
-        }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
-        {
+            return AgentSelfUpdate.IsSetupProcess(name);
         }
     }
 
@@ -383,6 +369,9 @@ public sealed partial class InstallGuard(PolicyState state, ILogger<InstallGuard
         {
             case GatePipe.OpRefresh:
                 state.RequestRefresh();
+                return new GateResponse { Ok = true };
+            case GatePipe.OpPrepareUpgrade:
+                UpgradeGate.Enter(TimeSpan.FromMinutes(15));
                 return new GateResponse { Ok = true };
             case GatePipe.OpPending:
                 lock (_gate)

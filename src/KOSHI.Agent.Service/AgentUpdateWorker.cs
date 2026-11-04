@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Security.Cryptography;
 using System.Text.Json;
 using KOSHI.Agent.Core;
 
@@ -19,7 +18,7 @@ public sealed class AgentUpdateWorker(ILogger<AgentUpdateWorker> logger) : Backg
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await Task.Delay(TimeSpan.FromSeconds(20), stoppingToken); // let the agent settle after boot
+        await Task.Delay(TimeSpan.FromSeconds(20), stoppingToken);
         using var timer = new PeriodicTimer(CheckInterval);
         do
         {
@@ -53,7 +52,6 @@ public sealed class AgentUpdateWorker(ILogger<AgentUpdateWorker> logger) : Backg
 
         var baseUri = new Uri(config.ServerUrl.TrimEnd('/') + "/");
         using var http = new HttpClient { BaseAddress = baseUri, Timeout = TimeSpan.FromMinutes(10) };
-        // Prefer the admin-managed release API; fall back to the statically deployed file.
         var release = await http.GetFromJsonSafeAsync<ReleaseInfo>("api/agent/release/latest.json", ct)
                       ?? await http.GetFromJsonSafeAsync<ReleaseInfo>("downloads/latest.json", ct);
         if (release is null || string.IsNullOrWhiteSpace(release.Version)) return;
@@ -68,43 +66,21 @@ public sealed class AgentUpdateWorker(ILogger<AgentUpdateWorker> logger) : Backg
         _attemptedVersion = release.Version;
 
         logger.LogInformation("New agent version {Latest} available (current {Current}); downloading", latest, current);
-        var temp = Path.Combine(Path.GetTempPath(), $"KOSHI-Agent-Setup-{release.Version}.exe");
+        UpgradeGate.Enter(TimeSpan.FromMinutes(15));
+        AgentSelfUpdate.ReleaseStale(release.Version);
+        var temp = AgentSelfUpdate.NewTempPath(release.Version);
+        await AgentSelfUpdate.DownloadAsync(http, temp, release.FileName, release.Size, progress: null, ct);
 
-        // Download from the release API, falling back to the static file by name.
-        HttpResponseMessage resp;
-        try
+        if (!await AgentSelfUpdate.ShaMatchesAsync(temp, release.Sha256, ct))
         {
-            resp = await http.GetAsync("api/agent/release/download", HttpCompletionOption.ResponseHeadersRead, ct);
-            if (!resp.IsSuccessStatusCode)
-            {
-                resp.Dispose();
-                var fileName = Path.GetFileName(release.FileName);
-                resp = await http.GetAsync($"downloads/{Uri.EscapeDataString(fileName)}", HttpCompletionOption.ResponseHeadersRead, ct);
-            }
-        }
-        catch (HttpRequestException)
-        {
-            return;
-        }
-        using (resp)
-        {
-            resp.EnsureSuccessStatusCode();
-            await using var fs = File.Create(temp);
-            await resp.Content.CopyToAsync(fs, ct);
-        }
-
-        var actual = Convert.ToHexString(await SHA256.HashDataAsync(File.OpenRead(temp), ct));
-        if (!actual.Equals(release.Sha256, StringComparison.OrdinalIgnoreCase))
-        {
-            logger.LogError("Downloaded installer hash mismatch; discarding. expected {Expected} actual {Actual}", release.Sha256, actual);
-            File.Delete(temp);
+            logger.LogError("Downloaded installer hash mismatch; discarding {Path}", temp);
+            try { File.Delete(temp); } catch (IOException) { }
             return;
         }
 
         logger.LogInformation("Installing agent update {Version} silently", release.Version);
         UpgradeGate.Enter(TimeSpan.FromMinutes(15));
-        // UseShellExecute detaches the installer so it survives the service restart it triggers.
-        Process.Start(new ProcessStartInfo(temp, "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES") { UseShellExecute = true });
+        AgentSelfUpdate.Launch(temp);
     }
 }
 

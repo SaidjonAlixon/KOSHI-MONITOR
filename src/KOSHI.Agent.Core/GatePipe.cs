@@ -16,6 +16,7 @@ public static class GatePipe
     public const string OpApprove = "approve";
     public const string OpDeny = "deny";
     public const string OpRefresh = "refresh";
+    public const string OpPrepareUpgrade = "prepare-upgrade";
 
     public static async Task<GateResponse?> SendAsync(GateRequest request, TimeSpan timeout, CancellationToken ct = default)
     {
