@@ -140,7 +140,45 @@ public sealed record AgentPolicyDto(
     string SupportContact,
     bool ProtectionEnabled = false,
     string? ProtectionSalt = null,
-    string? ProtectionHash = null);
+    string? ProtectionHash = null,
+    bool LocationEnabled = false,
+    int LocationIntervalSeconds = 300,
+    IReadOnlyList<AgentBlockedSiteDto>? BlockedSites = null,
+    bool VpnBlocked = false,
+    bool InstallBlocked = false);
+
+/// <summary>A blocked website (domain and all subdomains). Access is allowed only while <see cref="AllowedUntil"/> is in the future.</summary>
+public sealed record AgentBlockedSiteDto(string Domain, DateTime? AllowedUntil);
+
+/// <summary>Device position. Source: gps / wifi / cell / windows (Windows Location service) or ip (approximate, by public IP).</summary>
+public sealed class DeviceLocationReportRequest
+{
+    [Range(-90, 90)]
+    public double Latitude { get; set; }
+
+    [Range(-180, 180)]
+    public double Longitude { get; set; }
+
+    [Range(0, 5_000_000)]
+    public double? AccuracyMeters { get; set; }
+
+    [Required, RegularExpression("^(gps|wifi|cell|windows|ip)$")]
+    public string Source { get; set; } = "windows";
+
+    [StringLength(120)]
+    public string? City { get; set; }
+
+    [StringLength(120)]
+    public string? Region { get; set; }
+
+    [StringLength(120)]
+    public string? Country { get; set; }
+
+    [StringLength(200)]
+    public string? Isp { get; set; }
+
+    public DateTime? CapturedAt { get; set; }
+}
 
 public sealed record AgentReleaseDto(
     string Version,

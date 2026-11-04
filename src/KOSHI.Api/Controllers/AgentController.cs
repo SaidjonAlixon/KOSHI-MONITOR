@@ -35,6 +35,13 @@ public sealed class AgentController(DeviceService devices, TelemetryService tele
         return NoContent();
     }
 
+    [HttpPost("api/agent/location")]
+    public async Task<IActionResult> Location([FromServices] LocationService locations, DeviceLocationReportRequest request, CancellationToken ct)
+    {
+        await locations.ReportAsync(User.DeviceId(), request, ct);
+        return NoContent();
+    }
+
     [HttpGet("api/agent/support")]
     public async Task<ActionResult<AgentSupportPollDto>> SupportPoll([FromServices] SupportService support, [FromServices] IHubContext<MonitoringHub> monitoring, [FromQuery] DateTime? since, CancellationToken ct)
     {

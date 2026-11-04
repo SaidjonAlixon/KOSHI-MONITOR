@@ -11,7 +11,7 @@ using MessageBox = System.Windows.MessageBox;
 
 namespace KOSHI.Agent.Remote;
 
-public sealed partial class WindowsRemoteHost(Func<Task> refreshPolicy) : IRemoteHost
+public sealed partial class WindowsRemoteHost(Func<Task> refreshPolicy, Func<Task> locateNow) : IRemoteHost
 {
     private static readonly HashSet<string> ProtectedProcesses = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -125,6 +125,9 @@ public sealed partial class WindowsRemoteHost(Func<Task> refreshPolicy) : IRemot
             case RemoteCommands.RefreshPolicy:
                 await refreshPolicy();
                 return (true, "Siyosat yangilandi");
+            case RemoteCommands.LocateNow:
+                await locateNow();
+                return (true, "Joylashuv yuborildi");
             default:
                 return (false, "Qo'llab-quvvatlanmaydigan buyruq");
         }

@@ -112,11 +112,18 @@ end;
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   Code: Integer;
+  I: Integer;
 begin
-  { Upgrade: stop the running agent and service so files can be replaced. }
-  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM KOSHI.Agent.exe', '', SW_HIDE, ewWaitUntilTerminated, Code);
-  Exec(ExpandConstant('{sys}\sc.exe'), 'stop {#ServiceName}', '', SW_HIDE, ewWaitUntilTerminated, Code);
-  Sleep(1500);
+  { Upgrade: the running service opens an upgrade window when it sees this setup, then we can stop it and replace files. }
+  for I := 1 to 25 do
+  begin
+    Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM KOSHI.Agent.exe', '', SW_HIDE, ewWaitUntilTerminated, Code);
+    Exec(ExpandConstant('{sys}\sc.exe'), 'stop {#ServiceName}', '', SW_HIDE, ewWaitUntilTerminated, Code);
+    { 1060 = service does not exist (fresh install); 1062 = already stopped. }
+    if (Code = 1060) or (Code = 1062) then break;
+    Sleep(400);
+  end;
+  Sleep(400);
   Result := '';
 end;
 
@@ -129,7 +136,7 @@ begin
   Exec(ExpandConstant('{sys}\sc.exe'), 'create {#ServiceName} binPath= "' + Bin + '" start= auto DisplayName= "KOSHI Agent Service"', '', SW_HIDE, ewWaitUntilTerminated, Code);
   Exec(ExpandConstant('{sys}\sc.exe'), 'config {#ServiceName} binPath= "' + Bin + '" start= auto', '', SW_HIDE, ewWaitUntilTerminated, Code);
   Exec(ExpandConstant('{sys}\sc.exe'), 'description {#ServiceName} "KOSHI korporativ monitoring: siyosatlarni qo''llash va hisobot"', '', SW_HIDE, ewWaitUntilTerminated, Code);
-  Exec(ExpandConstant('{sys}\sc.exe'), 'failure {#ServiceName} reset= 86400 actions= restart/60000/restart/60000/restart/60000', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Exec(ExpandConstant('{sys}\sc.exe'), 'failure {#ServiceName} reset= 0 actions= restart/1000/restart/1000/restart/1000', '', SW_HIDE, ewWaitUntilTerminated, Code);
   Exec(ExpandConstant('{sys}\sc.exe'), 'start {#ServiceName}', '', SW_HIDE, ewWaitUntilTerminated, Code);
 end;
 

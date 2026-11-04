@@ -27,6 +27,9 @@ public sealed class SettingsService(IKoshiDbContext db, AuditWriter audit, ICurr
         public const string AgentProtectionEnabled = "agent.protectionEnabled";
         public const string AgentProtectionSalt = "agent.protectionSalt";
         public const string AgentProtectionHash = "agent.protectionHash";
+        public const string AgentLocationEnabled = "agent.locationEnabled";
+        public const string AgentVpnBlocked = "agent.vpnBlocked";
+        public const string AgentInstallBlocked = "agent.installBlocked";
     }
 
     public static readonly SystemSettingsDto Defaults = new(
@@ -42,7 +45,8 @@ public sealed class SettingsService(IKoshiDbContext db, AuditWriter audit, ICurr
         ReportedActivityWeight: 0.2,
         MinimumCoverage: 0.5,
         AgentAutoUpdate: true,
-        AgentProtectionEnabled: false);
+        AgentProtectionEnabled: false,
+        AgentLocationEnabled: true);
 
     public async Task<SystemSettingsDto> GetAsync(CancellationToken ct = default)
     {
@@ -61,7 +65,8 @@ public sealed class SettingsService(IKoshiDbContext db, AuditWriter audit, ICurr
             Dbl(map, Keys.ReportedActivityWeight, d.ReportedActivityWeight),
             Dbl(map, Keys.MinimumCoverage, d.MinimumCoverage),
             Bool(map, Keys.AgentAutoUpdate, d.AgentAutoUpdate),
-            Bool(map, Keys.AgentProtectionEnabled, d.AgentProtectionEnabled));
+            Bool(map, Keys.AgentProtectionEnabled, d.AgentProtectionEnabled),
+            Bool(map, Keys.AgentLocationEnabled, d.AgentLocationEnabled));
     }
 
     /// <summary>Returns the Windows-Settings protection state and password verifier for agents.</summary>
@@ -72,6 +77,48 @@ public sealed class SettingsService(IKoshiDbContext db, AuditWriter audit, ICurr
         var salt = map.GetValueOrDefault(Keys.AgentProtectionSalt);
         var hash = map.GetValueOrDefault(Keys.AgentProtectionHash);
         return (enabled && !string.IsNullOrEmpty(hash), salt, hash);
+    }
+
+    public async Task<DeviceControlsDto> GetControlsAsync(CancellationToken ct = default)
+    {
+        var map = await db.SystemSettings.AsNoTracking().ToDictionaryAsync(s => s.Key, s => s.Value, ct);
+        return new DeviceControlsDto(
+            Bool(map, Keys.AgentVpnBlocked, false),
+            Bool(map, Keys.AgentInstallBlocked, false),
+            !string.IsNullOrEmpty(map.GetValueOrDefault(Keys.AgentProtectionHash)));
+    }
+
+    public async Task<DeviceControlsDto> UpdateControlsAsync(UpdateDeviceControlsRequest r, CancellationToken ct = default)
+    {
+        var current = await GetControlsAsync(ct);
+        if (r.InstallBlocked && !current.ProtectionPasswordSet)
+            throw Errors.Validation(nameof(r.InstallBlocked), "Avval Sozlamalar → Tizim himoyasi bo‘limida himoya parolini o‘rnating: o‘rnatish shu parol bilan ochiladi.");
+
+        var values = new Dictionary<string, string>
+        {
+            [Keys.AgentVpnBlocked] = r.VpnBlocked ? "true" : "false",
+            [Keys.AgentInstallBlocked] = r.InstallBlocked ? "true" : "false",
+        };
+        var keys = values.Keys.ToList();
+        var existing = await db.SystemSettings.Where(s => keys.Contains(s.Key)).ToDictionaryAsync(s => s.Key, ct);
+        var now = clock.GetUtcNow().UtcDateTime;
+        foreach (var (key, value) in values)
+        {
+            if (existing.TryGetValue(key, out var s))
+            {
+                if (s.Value == value) continue;
+                s.Value = value;
+                s.UpdatedAt = now;
+                s.UpdatedByUserId = currentUser.UserId;
+            }
+            else
+            {
+                db.SystemSettings.Add(new SystemSetting { Id = Guid.NewGuid(), Key = key, Value = value, UpdatedAt = now, UpdatedByUserId = currentUser.UserId });
+            }
+        }
+        audit.Record("controls.update", "SystemSettings", null, new { r.VpnBlocked, r.InstallBlocked });
+        await db.SaveChangesAsync(ct);
+        return await GetControlsAsync(ct);
     }
 
     public async Task<SystemSettingsDto> UpdateAsync(UpdateSystemSettingsRequest r, CancellationToken ct = default)
@@ -99,6 +146,7 @@ public sealed class SettingsService(IKoshiDbContext db, AuditWriter audit, ICurr
             [Keys.MinimumCoverage] = r.MinimumCoverage.ToString(CultureInfo.InvariantCulture),
             [Keys.AgentAutoUpdate] = r.AgentAutoUpdate ? "true" : "false",
             [Keys.AgentProtectionEnabled] = r.AgentProtectionEnabled ? "true" : "false",
+            [Keys.AgentLocationEnabled] = r.AgentLocationEnabled ? "true" : "false",
         };
 
         var existingProtHash = await db.SystemSettings.AsNoTracking().Where(s => s.Key == Keys.AgentProtectionHash).Select(s => s.Value).FirstOrDefaultAsync(ct);

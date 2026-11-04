@@ -1,5 +1,5 @@
 import {
-  Activity, AppWindow, BarChart3, Bell, FileSpreadsheet, FileText, History, LayoutDashboard, LogOut, Menu, MessageSquare, Monitor,
+  Activity, AppWindow, BarChart3, Bell, FileSpreadsheet, FileText, History, LayoutDashboard, LogOut, MapPin, Menu, MessageSquare, Monitor,
   Moon, PanelLeftClose, Search, Settings, ShieldCheck, Sun, UserCog, Users, X,
 } from 'lucide-react'
 import { useEffect, useState, type ComponentType } from 'react'
@@ -21,6 +21,7 @@ export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
       { to: '/app', label: 'Boshqaruv paneli', icon: LayoutDashboard, permission: Permissions.DashboardRead },
       { to: '/app/live', label: 'Jonli kuzatuv', icon: Activity, permission: Permissions.MonitoringLive },
       { to: '/app/timeline', label: 'Faoliyat tarixi', icon: History, permission: Permissions.MonitoringRead },
+      { to: '/app/location', label: 'Joylashuv', icon: MapPin, permission: Permissions.LocationRead },
     ],
   },
   {

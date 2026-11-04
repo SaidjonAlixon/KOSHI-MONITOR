@@ -5,6 +5,7 @@
     <AssemblyName>KOSHI.Agent.Service</AssemblyName>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <UserSecretsId>dotnet-KOSHI.Agent.Service-18881f6b-3197-49b6-a3bc-e2cbcc70afc1</UserSecretsId>
     <ApplicationIcon>koshi.ico</ApplicationIcon>
     <Product>KOSHI Agent Service</Product>

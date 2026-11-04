@@ -336,6 +336,22 @@ public sealed record ApplicationSummaryDto(
     int DeviceCount,
     string Classification);
 
+/// <summary>Which policy the Applications page is editing: the global one, or a device-specific one.</summary>
+public sealed record ApplicationScopeDto(
+    Guid PolicyId,
+    bool IsDevicePolicy,
+    Guid? DeviceId,
+    string? DeviceName,
+    string? EmployeeName,
+    string Label,
+    bool InheritsFromGlobal);
+
+public sealed class EnsureDeviceScopeRequest
+{
+    [Required]
+    public Guid DeviceId { get; set; }
+}
+
 // ---------- Monitoring ----------
 
 public class MonitoringQuery
@@ -576,7 +592,8 @@ public sealed record SystemSettingsDto(
     double ReportedActivityWeight,
     double MinimumCoverage,
     bool AgentAutoUpdate,
-    bool AgentProtectionEnabled = false);
+    bool AgentProtectionEnabled = false,
+    bool AgentLocationEnabled = true);
 
 public sealed class UpdateSystemSettingsRequest
 {
@@ -622,7 +639,109 @@ public sealed class UpdateSystemSettingsRequest
     /// <summary>New protection password (plaintext). Leave null to keep the existing one.</summary>
     [StringLength(128, MinimumLength = 4)]
     public string? AgentProtectionPassword { get; set; }
+
+    /// <summary>Agents report the device position (Windows Location: GPS / Wi-Fi; falls back to approximate IP location).</summary>
+    public bool AgentLocationEnabled { get; set; } = true;
 }
+
+// ---------- Web filter / device controls ----------
+
+public sealed record BlockedSiteDto(
+    Guid Id,
+    string Domain,
+    string? Category,
+    string? Note,
+    bool IsEnabled,
+    DateTime CreatedAt,
+    IReadOnlyList<SiteAllowanceDto> ActiveAllowances);
+
+/// <summary>Temporary access to a blocked site. DeviceId null = all computers.</summary>
+public sealed record SiteAllowanceDto(
+    Guid Id,
+    Guid? DeviceId,
+    string? DeviceName,
+    DateTime ExpiresAt,
+    string? Reason,
+    string? CreatedBy,
+    DateTime CreatedAt);
+
+public sealed class CreateBlockedSitesRequest
+{
+    /// <summary>Domains or URLs; normalised to the registrable host (scheme, path and "www." are removed).</summary>
+    [Required, MinLength(1), MaxLength(200)]
+    public List<string> Domains { get; set; } = [];
+
+    [StringLength(60)]
+    public string? Category { get; set; }
+
+    [StringLength(300)]
+    public string? Note { get; set; }
+}
+
+public sealed class UpdateBlockedSiteRequest
+{
+    [StringLength(60)]
+    public string? Category { get; set; }
+
+    [StringLength(300)]
+    public string? Note { get; set; }
+
+    public bool IsEnabled { get; set; } = true;
+}
+
+public sealed class GrantSiteAllowanceRequest
+{
+    /// <summary>Duration of the temporary access, up to 7 days.</summary>
+    [Range(1, 10080)]
+    public int Minutes { get; set; } = 30;
+
+    /// <summary>Null = every computer.</summary>
+    public Guid? DeviceId { get; set; }
+
+    [StringLength(300)]
+    public string? Reason { get; set; }
+}
+
+public sealed record DeviceControlsDto(bool VpnBlocked, bool InstallBlocked, bool ProtectionPasswordSet);
+
+public sealed class UpdateDeviceControlsRequest
+{
+    public bool VpnBlocked { get; set; }
+
+    /// <summary>Any software installation (normal or "Run as administrator") requires the protection password.</summary>
+    public bool InstallBlocked { get; set; }
+}
+
+// ---------- Device location ----------
+
+public sealed record DeviceLocationDto(
+    Guid DeviceId,
+    string DeviceName,
+    string? Hostname,
+    string? EmployeeName,
+    string? DepartmentName,
+    bool IsOnline,
+    double Latitude,
+    double Longitude,
+    double? AccuracyMeters,
+    string Source,
+    string? City,
+    string? Region,
+    string? Country,
+    string? Isp,
+    string? PublicIp,
+    DateTime FirstSeenAt,
+    DateTime LastSeenAt);
+
+public sealed record LocationPointDto(
+    double Latitude,
+    double Longitude,
+    double? AccuracyMeters,
+    string Source,
+    string? City,
+    string? Country,
+    DateTime FirstSeenAt,
+    DateTime LastSeenAt);
 
 public sealed record DashboardSummaryDto(
     int TotalDevices,

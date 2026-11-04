@@ -48,7 +48,8 @@ public sealed record AgentStatus(
     string MonitoringNotice,
     string SupportContact,
     bool RemoteChannelConnected,
-    bool AutoUpdateEnabled);
+    bool AutoUpdateEnabled,
+    string? LocationInfo = null);
 
 /// <summary>Runs inside the interactive user session: sampling, local queue, upload, heartbeat, policy, app enforcement and real-time chat/remote channel.</summary>
 [SupportedOSPlatform("windows")]
@@ -61,6 +62,10 @@ public sealed class AgentRuntime : IAsyncDisposable
     private readonly IActivitySource _source;
     private readonly IRemoteHost _remoteHost;
     private readonly IAppLockHost _appLockHost;
+    private readonly ILocationProvider? _location;
+    private readonly SemaphoreSlim _locateGate = new(1, 1);
+    private IpLocation? _ipLocation;
+    private DateTime _ipLocationAt = DateTime.MinValue;
     private readonly ILogger _logger;
     private readonly Dictionary<string, DateTime> _unlockedApps = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _unlockHiddenPolls = new(StringComparer.OrdinalIgnoreCase);
@@ -83,11 +88,12 @@ public sealed class AgentRuntime : IAsyncDisposable
     private bool _monitoringAllowed = true;
     private DateOnly _today;
 
-    public AgentRuntime(IActivitySource source, IRemoteHost remoteHost, IAppLockHost appLockHost, ILogger logger)
+    public AgentRuntime(IActivitySource source, IRemoteHost remoteHost, IAppLockHost appLockHost, ILogger logger, ILocationProvider? location = null)
     {
         _source = source;
         _remoteHost = remoteHost;
         _appLockHost = appLockHost;
+        _location = location;
         _logger = logger;
         Status = new AgentStatus(AgentState.NotActivated, null, null, false, null, null, 0, null, DefaultNotice, "", false, true);
     }
@@ -237,7 +243,7 @@ public sealed class AgentRuntime : IAsyncDisposable
 
             try
             {
-                await Task.WhenAll(SampleLoop(ct), EnforceRulesLoop(ct), SyncLoop(ct), HeartbeatLoop(ct));
+                await Task.WhenAll(SampleLoop(ct), EnforceRulesLoop(ct), SyncLoop(ct), HeartbeatLoop(ct), LocationLoop(ct));
             }
             catch (DeviceRejectedException ex)
             {
@@ -365,10 +371,10 @@ public sealed class AgentRuntime : IAsyncDisposable
         }
     }
 
-    // After unlock: ignore a few empty polls (UWP Settings can flicker) then re-lock only once
-    // the window stays gone — never kill the process. Closing with X then reopening asks again.
-    private const int UnlockGraceSeconds = 5;
-    private const int UnlockHiddenPollsBeforeRelock = 12;
+    // After unlock: ignore a couple of empty polls (UWP Settings can flicker) then re-lock once
+    // the window is gone — never kill the process. Closing with X then reopening asks again.
+    private const int UnlockGraceSeconds = 3;
+    private const int UnlockHiddenPollsBeforeRelock = 3;
 
     private void EnforcePasswordLock(AgentApplicationRuleDto rule, HashSet<string> runningNames, string? normFg)
     {
@@ -684,6 +690,70 @@ public sealed class AgentRuntime : IAsyncDisposable
                 SetStatus(s => s with { State = AgentState.Offline });
             }
             await Task.Delay(TimeSpan.FromSeconds(_policy?.HeartbeatIntervalSeconds ?? 30), ct);
+        }
+    }
+
+    private async Task LocationLoop(CancellationToken ct)
+    {
+        await Task.Delay(TimeSpan.FromSeconds(20), ct);
+        while (!ct.IsCancellationRequested)
+        {
+            if (_policy is { LocationEnabled: true }) await ReportLocationOnceAsync(ct);
+            else if (_policy is not null) SetStatus(s => s with { LocationInfo = "O‘chirilgan (administrator)" });
+            var wait = Math.Clamp(_policy?.LocationIntervalSeconds ?? 300, 60, 3600);
+            await Task.Delay(TimeSpan.FromSeconds(wait), ct);
+        }
+    }
+
+    /// <summary>Administrator "locate now" request.</summary>
+    public Task LocateNowAsync() =>
+        _api is null || _policy is not { LocationEnabled: true } ? Task.CompletedTask : ReportLocationOnceAsync(CancellationToken.None);
+
+    private async Task ReportLocationOnceAsync(CancellationToken ct)
+    {
+        if (_api is null || !await _locateGate.WaitAsync(0, ct)) return;
+        try
+        {
+            var precise = _location is null ? null : await _location.GetAsync(ct);
+            if (_ipLocation is null || DateTime.UtcNow - _ipLocationAt > TimeSpan.FromMinutes(30))
+            {
+                _ipLocation = await IpLocationLookup.LookupAsync(ct) ?? _ipLocation;
+                _ipLocationAt = DateTime.UtcNow;
+            }
+            var ip = _ipLocation;
+
+            DeviceLocationReportRequest? report = precise is not null
+                ? new DeviceLocationReportRequest
+                {
+                    Latitude = precise.Latitude, Longitude = precise.Longitude, AccuracyMeters = precise.AccuracyMeters, Source = precise.Source,
+                    City = ip?.City, Region = ip?.Region, Country = ip?.Country, Isp = ip?.Isp, CapturedAt = DateTime.UtcNow,
+                }
+                : ip is not null
+                    ? new DeviceLocationReportRequest
+                    {
+                        Latitude = ip.Latitude, Longitude = ip.Longitude, AccuracyMeters = IpLocationLookup.ApproximateAccuracyMeters, Source = "ip",
+                        City = ip.City, Region = ip.Region, Country = ip.Country, Isp = ip.Isp, CapturedAt = DateTime.UtcNow,
+                    }
+                    : null;
+
+            if (report is null)
+            {
+                SetStatus(s => s with { LocationInfo = "Aniqlab bo‘lmadi" });
+                return;
+            }
+            await _api.ReportLocationAsync(report, ct);
+            var info = precise is not null
+                ? $"Aniq — Windows joylashuv{(precise.AccuracyMeters is { } a ? $" (±{a:0} m)" : "")}"
+                : $"Taxminiy — IP bo‘yicha{(ip?.City is { } c ? $" ({c})" : "")}";
+            SetStatus(s => s with { LocationInfo = info });
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            _logger.LogDebug(ex, "Location report failed");
+        }
+        finally
+        {
+            _locateGate.Release();
         }
     }
 

@@ -6,7 +6,7 @@ namespace KOSHI.Agent.Remote;
 
 public partial class AppLockWindow : Window
 {
-    private readonly Func<string, bool> _verify;
+    private readonly Func<string, (bool Ok, bool Closed, string? Message)> _verify;
     private readonly DispatcherTimer _timeoutTimer;
     private int _attempts;
     private bool _syncing;
@@ -14,13 +14,23 @@ public partial class AppLockWindow : Window
     private string CurrentPassword => PasswordPlain.Visibility == Visibility.Visible ? PasswordPlain.Text : PasswordInput.Password;
 
     public AppLockWindow(string ruleName, string processName, Func<string, bool> verify)
+        : this(string.IsNullOrWhiteSpace(ruleName) ? processName : ruleName, null, null, null, p => (verify(p), false, null))
+    {
+    }
+
+    /// <param name="verify">Returns whether the password is accepted, whether the request is gone (close the dialog) and an optional error text.</param>
+    public AppLockWindow(string title, string? subtitle, string? description, string? okText,
+        Func<string, (bool Ok, bool Closed, string? Message)> verify, int timeoutSeconds = 45)
     {
         InitializeComponent();
         _verify = verify;
-        TitleText.Text = string.IsNullOrWhiteSpace(ruleName) ? processName : ruleName;
+        TitleText.Text = title;
+        if (subtitle is not null) SubtitleText.Text = subtitle;
+        if (description is not null) DescriptionText.Text = description;
+        if (okText is not null) OkButton.Content = okText;
 
-        // Auto-cancel and kill the locked app if no password is entered within 45 seconds
-        _timeoutTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(45) };
+        // Auto-cancel (the locked app / installer is closed) if no password is entered in time
+        _timeoutTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(timeoutSeconds) };
         _timeoutTimer.Tick += (_, _) =>
         {
             _timeoutTimer.Stop();
@@ -87,14 +97,21 @@ public partial class AppLockWindow : Window
 
     private void OnOk(object sender, RoutedEventArgs e)
     {
-        if (_verify(CurrentPassword))
+        var (ok, closed, message) = _verify(CurrentPassword);
+        if (ok)
         {
             _timeoutTimer.Stop();
             DialogResult = true;
             return;
         }
+        if (closed)
+        {
+            _timeoutTimer.Stop();
+            DialogResult = false;
+            return;
+        }
         _attempts++;
-        ErrorText.Text = $"Parol noto‘g‘ri! Urinish: {_attempts}/3";
+        ErrorText.Text = message ?? $"Parol noto‘g‘ri! Urinish: {_attempts}/3";
         ErrorText.Visibility = Visibility.Visible;
         _syncing = true;
         PasswordInput.Clear();

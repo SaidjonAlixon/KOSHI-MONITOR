@@ -57,6 +57,11 @@ public sealed class AppLockHost : IAppLockHost
     [DllImport("ntdll.dll")]
     private static extern int NtResumeProcess(nint processHandle);
 
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmGetWindowAttribute(nint hWnd, int dwAttribute, out int pvAttribute, int cbAttribute);
+
+    private const int DwmwaCloaked = 14;
+
     public bool HasActiveVisibleWindow(string processName)
     {
         var pids = GetMatchingSessionPids(processName);
@@ -65,7 +70,7 @@ public sealed class AppLockHost : IAppLockHost
         var foundVisible = false;
         EnumWindows((hWnd, _) =>
         {
-            if (!IsWindowVisible(hWnd) || IsIconic(hWnd)) return true;
+            if (!IsWindowVisible(hWnd) || IsIconic(hWnd) || IsCloaked(hWnd)) return true;
             if (WindowBelongsToPids(hWnd, pids))
             {
                 foundVisible = true;
@@ -75,6 +80,11 @@ public sealed class AppLockHost : IAppLockHost
         }, 0);
         return foundVisible;
     }
+
+    // Closing a UWP app (Windows Settings) with X keeps its process suspended and its window
+    // "visible" but DWM-cloaked; such windows are not on screen.
+    private static bool IsCloaked(nint hWnd) =>
+        DwmGetWindowAttribute(hWnd, DwmwaCloaked, out var cloaked, sizeof(int)) == 0 && cloaked != 0;
 
     private static bool WindowBelongsToPids(nint hWnd, HashSet<uint> pids)
     {

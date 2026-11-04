@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Pencil, Plus, Trash2 } from 'lucide-react'
-import { useEffect, useState, type FormEvent } from 'react'
-import { Checkbox, Field, FilterBar, Input, Modal, PageHeader, Select, defaultFilters, filtersToQuery, tableClass, tbodyClass, td, th, theadClass, type Filters } from '@/components/forms'
+import { Monitor, Pencil, Plus, Trash2, Undo2, UserRound } from 'lucide-react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { InstallControlCard, SiteBlockCard, VpnControlCard } from '@/components/DeviceControls'
+import { Checkbox, Field, FilterBar, Input, Modal, PageHeader, Select, defaultFilters, filtersToQuery, tableClass, tbodyClass, td, th, theadClass, useDevicesLookup, useEmployeesLookup, type Filters } from '@/components/forms'
 import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, LoadingState, formatDuration } from '@/components/ui'
 import { api } from '@/lib/api'
 import { Permissions, useAuth } from '@/lib/auth'
 import { CLASSIFICATION_LABELS } from '@/lib/labels'
-import type { ApplicationRule, ApplicationSummary, Classification, Policy, Restriction } from '@/lib/types'
+import type { ApplicationRule, ApplicationScope, ApplicationSummary, Classification, Restriction } from '@/lib/types'
 
 const clsTone = { Approved: 'green', NotApproved: 'red', Neutral: 'gray', Mixed: 'amber', Unclassified: 'gray' } as const
 
@@ -26,6 +27,14 @@ interface Draft {
 
 const emptyDraft = (processName = ''): Draft => ({ name: processName, processName, classification: 'Approved', restriction: 'None', dailyLimitMinutes: '', requirePassword: false, password: '', pathPattern: '', publisher: '', description: '' })
 
+function toDraft(r: ApplicationRule): Draft {
+  return {
+    id: r.id, name: r.name, processName: r.processName, classification: r.classification, restriction: r.restriction,
+    dailyLimitMinutes: r.dailyLimitMinutes?.toString() ?? '', requirePassword: r.requirePassword, password: '',
+    pathPattern: r.pathPattern ?? '', publisher: r.publisher ?? '', description: r.description ?? '',
+  }
+}
+
 function RuleForm({ policyId, draft, onDone }: { policyId: string; draft: Draft; onDone: () => void }) {
   const qc = useQueryClient()
   const [d, setD] = useState(draft)
@@ -42,6 +51,7 @@ function RuleForm({ policyId, draft, onDone }: { policyId: string; draft: Draft;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['rules'] })
+      qc.invalidateQueries({ queryKey: ['app-scope'] })
       qc.invalidateQueries({ queryKey: ['policies'] })
       onDone()
     },
@@ -125,13 +135,37 @@ export function ApplicationsPage() {
   const qc = useQueryClient()
   const manage = can(Permissions.PoliciesManage)
   const [filters, setFilters] = useState<Filters>(defaultFilters(30))
-  const [policyId, setPolicyId] = useState('')
   const [draft, setDraft] = useState<Draft | null>(null)
+  const [editPolicyId, setEditPolicyId] = useState('')
 
-  const policies = useQuery({ queryKey: ['policies'], queryFn: () => api<Policy[]>('/api/policies') })
+  const emps = useEmployeesLookup()
+  const devs = useDevicesLookup()
+  const employeeId = filters.employeeId
+  const deviceId = filters.deviceId
+
+  const devicesForEmployee = useMemo(() => {
+    const all = devs.data?.items ?? []
+    return employeeId ? all.filter((d) => d.employeeId === employeeId) : all
+  }, [devs.data, employeeId])
+
   useEffect(() => {
-    if (!policyId && policies.data?.[0]) setPolicyId(policies.data[0].id)
-  }, [policies.data, policyId])
+    if (!employeeId) return
+    if (deviceId && devicesForEmployee.some((d) => d.id === deviceId)) return
+    const only = devicesForEmployee.length === 1 ? devicesForEmployee[0] : undefined
+    const next = only?.id ?? ''
+    if (next === deviceId) return
+    setFilters((f) => ({ ...f, deviceId: next }))
+  }, [employeeId, deviceId, devicesForEmployee])
+
+  const setTarget = (patch: { employeeId?: string; deviceId?: string }) => setFilters((f) => ({ ...f, ...patch }))
+
+  const scope = useQuery({
+    queryKey: ['app-scope', deviceId],
+    queryFn: () => api<ApplicationScope>('/api/applications/scope', { query: { deviceId } }),
+  })
+  const policyId = scope.data?.policyId ?? ''
+  const needsDeviceChoice = !!employeeId && !deviceId && devicesForEmployee.length !== 1
+  const canEditRules = !!policyId && !needsDeviceChoice
 
   const usage = useQuery({
     queryKey: ['applications', filters],
@@ -143,6 +177,23 @@ export function ApplicationsPage() {
     queryFn: () => api<ApplicationRule[]>('/api/applications/rules', { query: { policyId } }),
     enabled: !!policyId,
   })
+
+  const ensure = useMutation({
+    mutationFn: (id: string) => api<ApplicationScope>('/api/applications/scope', { method: 'POST', body: { deviceId: id } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['app-scope'] })
+      qc.invalidateQueries({ queryKey: ['rules'] })
+      qc.invalidateQueries({ queryKey: ['policies'] })
+    },
+  })
+  const revert = useMutation({
+    mutationFn: (id: string) => api(`/api/applications/scope/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['app-scope'] })
+      qc.invalidateQueries({ queryKey: ['rules'] })
+      qc.invalidateQueries({ queryKey: ['policies'] })
+    },
+  })
   const remove = useMutation({
     mutationFn: (id: string) => api(`/api/applications/rules/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
@@ -150,34 +201,138 @@ export function ApplicationsPage() {
       qc.invalidateQueries({ queryKey: ['policies'] })
     },
   })
+
+  const resolvePolicy = async (): Promise<string> => {
+    if (!scope.data) return policyId
+    if (!deviceId || scope.data.isDevicePolicy || !scope.data.inheritsFromGlobal) return scope.data.policyId
+    const next = await ensure.mutateAsync(deviceId)
+    return next.policyId
+  }
+
+  const openDraft = async (seed: Draft) => {
+    if (!canEditRules) return
+    const pid = await resolvePolicy()
+    let next = seed
+    if (seed.id && pid !== policyId) {
+      const copied = await qc.fetchQuery({
+        queryKey: ['rules', pid],
+        queryFn: () => api<ApplicationRule[]>('/api/applications/rules', { query: { policyId: pid } }),
+      })
+      const match = copied.find((r) => r.processName.toLowerCase() === seed.processName.toLowerCase())
+      next = match ? toDraft(match) : { ...seed, id: undefined }
+    }
+    setEditPolicyId(pid)
+    setDraft(next)
+  }
+
+  const deleteRule = async (r: ApplicationRule) => {
+    if (!confirm(`${r.processName} qoidasi o‘chirilsinmi?`)) return
+    const pid = await resolvePolicy()
+    if (pid === r.policyId) {
+      remove.mutate(r.id)
+      return
+    }
+    const copied = await qc.fetchQuery({
+      queryKey: ['rules', pid],
+      queryFn: () => api<ApplicationRule[]>('/api/applications/rules', { query: { policyId: pid } }),
+    })
+    const match = copied.find((x) => x.processName.toLowerCase() === r.processName.toLowerCase())
+    if (match) remove.mutate(match.id)
+  }
+
   const total = (usage.data ?? []).reduce((s, a) => s + a.foregroundSeconds, 0)
+  const selectedDevice = (devs.data?.items ?? []).find((d) => d.id === deviceId)
+  const selectedEmployee = (emps.data?.items ?? []).find((e) => e.id === employeeId)
+  const inheritHint = !!deviceId && (scope.data?.inheritsFromGlobal ?? false)
 
   return (
     <>
-      <PageHeader title="Dasturlar boshqaruvi" subtitle="Ruxsat berilgan va taqiqlangan dasturlar, foydalanish limitlari va tasnif" />
+      <PageHeader title="Dasturlar boshqaruvi" subtitle="Avval xodim yoki kompyuterni tanlang — qoidalar faqat shu tanlovga qo‘llaniladi" />
+
+      <Card>
+        <CardHeader title="Kim uchun?" subtitle="1-qadam: xodim yoki kompyuterni tanlang. Keyin dastur qoidalari shu odam/kompyuterga yoziladi." />
+        <div className="grid gap-4 p-5 sm:grid-cols-2">
+          <Field label="Xodim">
+            <div className="relative">
+              <UserRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <Select value={employeeId} onChange={(e) => setTarget({ employeeId: e.target.value, deviceId: '' })} className="pl-9">
+                <option value="">Barcha xodimlar</option>
+                {(emps.data?.items ?? []).map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.fullName}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </Field>
+          <Field label="Kompyuter" hint={employeeId && devicesForEmployee.length === 0 ? 'Bu xodimga biriktirilgan kompyuter yo‘q' : undefined}>
+            <div className="relative">
+              <Monitor className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <Select value={deviceId} onChange={(e) => setTarget({ deviceId: e.target.value })} className="pl-9">
+                <option value="">{employeeId ? 'Xodimning kompyuterini tanlang…' : 'Barcha kompyuterlar (standart)'}</option>
+                {devicesForEmployee.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.displayName}{d.employeeName ? ` — ${d.employeeName}` : ''}{d.hostname ? ` (${d.hostname})` : ''}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </Field>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-3 dark:border-white/5">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            {scope.isPending ? (
+              <span className="text-slate-500">Siyosat aniqlanmoqda…</span>
+            ) : scope.isError ? (
+              <span className="text-rose-600">Siyosatni o‘qib bo‘lmadi</span>
+            ) : needsDeviceChoice ? (
+              <Badge tone="amber">Kompyuterni tanlang</Badge>
+            ) : scope.data?.isDevicePolicy ? (
+              <>
+                <Badge tone="blue">Shaxsiy qoidalar</Badge>
+                <span className="text-slate-600 dark:text-slate-300">{scope.data.label}</span>
+              </>
+            ) : (
+              <>
+                <Badge>{deviceId ? 'Standart qoidalar' : 'Barcha kompyuterlar'}</Badge>
+                <span className="text-slate-600 dark:text-slate-300">
+                  {deviceId
+                    ? `${scope.data?.label ?? selectedDevice?.displayName}: hozir umumiy qoidalar. O‘zgartirish faqat shu kompyuterga yoziladi.`
+                    : selectedEmployee
+                      ? `${selectedEmployee.fullName} — avval kompyuterini tanlang`
+                      : 'Qoidalar barcha kompyuterlarga tatbiq etiladi'}
+                </span>
+              </>
+            )}
+          </div>
+          {manage && scope.data?.isDevicePolicy && deviceId && (
+            <Button
+              variant="secondary"
+              loading={revert.isPending}
+              onClick={() => confirm('Shaxsiy qoidalar o‘chirilsinmi? Bu kompyuter yana umumiy (standart) qoidalarga qaytadi.') && revert.mutate(deviceId)}
+            >
+              <Undo2 className="size-4" /> Standartga qaytarish
+            </Button>
+          )}
+        </div>
+      </Card>
+
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader
             title="Siyosat qoidalari"
-            subtitle="Qoidalar siyosat qoralamasiga tegishli"
+            subtitle={inheritHint ? 'Hozir standart qoidalar ko‘rsatilgan — tahrir shu kompyuter uchun alohida nusxa yaratadi' : 'Tanlangan xodim/kompyuter uchun ruxsat va taqiqlar'}
             actions={
-              <div className="flex gap-2">
-                <Select value={policyId} onChange={(e) => setPolicyId(e.target.value)} className="w-56" aria-label="Siyosat">
-                  {(policies.data ?? []).map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} {p.hasUnpublishedChanges ? '•' : ''}
-                    </option>
-                  ))}
-                </Select>
-                {manage && policyId && (
-                  <Button onClick={() => setDraft(emptyDraft())}>
-                    <Plus className="size-4" />
-                  </Button>
-                )}
-              </div>
+              manage && canEditRules ? (
+                <Button onClick={() => void openDraft(emptyDraft())} loading={ensure.isPending}>
+                  <Plus className="size-4" />
+                </Button>
+              ) : undefined
             }
           />
-          {rules.isPending && policyId ? (
+          {needsDeviceChoice ? (
+            <EmptyState title="Kompyuterni tanlang" hint="Bu xodimda bir nechta kompyuter bor. Qoidalar qaysi biriga yozilishini yuqoridan tanlang." />
+          ) : rules.isPending && policyId ? (
             <LoadingState />
           ) : rules.isError ? (
             <ErrorState error={rules.error} />
@@ -213,15 +368,10 @@ export function ApplicationsPage() {
                     {manage && (
                       <td className={td}>
                         <div className="flex justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            onClick={() =>
-                              setDraft({ id: r.id, name: r.name, processName: r.processName, classification: r.classification, restriction: r.restriction, dailyLimitMinutes: r.dailyLimitMinutes?.toString() ?? '', requirePassword: r.requirePassword, password: '', pathPattern: r.pathPattern ?? '', publisher: r.publisher ?? '', description: r.description ?? '' })
-                            }
-                          >
+                          <Button variant="ghost" disabled={!canEditRules} onClick={() => void openDraft(toDraft(r))}>
                             <Pencil className="size-4" />
                           </Button>
-                          <Button variant="ghost" onClick={() => confirm(`${r.processName} qoidasi o‘chirilsinmi?`) && remove.mutate(r.id)}>
+                          <Button variant="ghost" disabled={!canEditRules} onClick={() => void deleteRule(r)}>
                             <Trash2 className="size-4 text-rose-500" />
                           </Button>
                         </div>
@@ -235,7 +385,7 @@ export function ApplicationsPage() {
         </Card>
 
         <Card>
-          <CardHeader title="Kuzatilgan dasturlar" subtitle="Faol oynadagi va fondagi vaqt" />
+          <CardHeader title="Kuzatilgan dasturlar" subtitle={deviceId || employeeId ? 'Tanlangan xodim/kompyuterdagi faol va fondagi vaqt' : 'Barcha kompyuterlardagi faol va fondagi vaqt'} />
           {!can(Permissions.MonitoringRead) ? (
             <EmptyState title="Ruxsat yo‘q" hint="monitoring.read ruxsati kerak." />
           ) : usage.isPending ? (
@@ -273,7 +423,7 @@ export function ApplicationsPage() {
                       </td>
                       {manage && (
                         <td className={td}>
-                          <Button variant="ghost" title="Qoida qo‘shish" disabled={!policyId} onClick={() => setDraft(emptyDraft(a.processName))}>
+                          <Button variant="ghost" title="Qoida qo‘shish" disabled={!canEditRules} onClick={() => void openDraft(emptyDraft(a.processName))}>
                             <Plus className="size-4" />
                           </Button>
                         </td>
@@ -286,9 +436,14 @@ export function ApplicationsPage() {
           )}
         </Card>
       </div>
-      <FilterBar value={filters} onChange={setFilters} />
+      <FilterBar value={filters} onChange={setFilters} show={['date']} />
+      <div className="grid gap-6 xl:grid-cols-2">
+        <SiteBlockCard manage={manage} deviceId={deviceId || undefined} />
+        <VpnControlCard manage={manage} />
+        <InstallControlCard manage={manage} />
+      </div>
       <Modal open={draft !== null} title={draft?.id ? 'Qoidani tahrirlash' : 'Yangi qoida'} onClose={() => setDraft(null)} wide>
-        {draft && <RuleForm policyId={policyId} draft={draft} onDone={() => setDraft(null)} />}
+        {draft && <RuleForm policyId={editPolicyId || policyId} draft={draft} onDone={() => setDraft(null)} />}
       </Modal>
     </>
   )

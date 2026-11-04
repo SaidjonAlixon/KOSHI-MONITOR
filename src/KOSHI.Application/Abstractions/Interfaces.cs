@@ -19,6 +19,9 @@ public interface IKoshiDbContext
     DbSet<DeviceCredential> DeviceCredentials { get; }
     DbSet<DeviceHeartbeat> DeviceHeartbeats { get; }
     DbSet<DeviceConnection> DeviceConnections { get; }
+    DbSet<DeviceLocation> DeviceLocations { get; }
+    DbSet<BlockedSite> BlockedSites { get; }
+    DbSet<SiteAllowance> SiteAllowances { get; }
     DbSet<ApplicationEvent> ApplicationEvents { get; }
     DbSet<ActivitySession> ActivitySessions { get; }
     DbSet<ApplicationUsageSummary> ApplicationUsageSummaries { get; }

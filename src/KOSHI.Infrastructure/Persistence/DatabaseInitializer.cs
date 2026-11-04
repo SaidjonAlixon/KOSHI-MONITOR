@@ -57,11 +57,17 @@ public sealed class DatabaseInitializer(
                     rolesChanged = true;
                 }
             }
-            else if (defaults.Contains(Permissions.SupportChat) && !role.Permissions.Contains(Permissions.SupportChat))
+            else
             {
-                role.Permissions = [.. role.Permissions, Permissions.SupportChat];
-                role.UpdatedAt = now;
-                rolesChanged = true;
+                // Permissions introduced after the role was created are granted to built-in roles that have them by default.
+                var missing = new[] { Permissions.SupportChat, Permissions.LocationRead }
+                    .Where(p => defaults.Contains(p) && !role.Permissions.Contains(p)).ToList();
+                if (missing.Count > 0)
+                {
+                    role.Permissions = [.. role.Permissions, .. missing];
+                    role.UpdatedAt = now;
+                    rolesChanged = true;
+                }
             }
         }
         if (rolesChanged) await db.SaveChangesAsync(ct);

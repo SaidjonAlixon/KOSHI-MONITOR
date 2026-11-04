@@ -24,6 +24,7 @@ export const Permissions = {
   SettingsManage: 'settings.manage',
   SupportChat: 'support.chat',
   RemoteControl: 'remote.control',
+  LocationRead: 'location.read',
   DataUnscoped: 'data.unscoped',
   RolesManage: 'roles.manage',
 } as const

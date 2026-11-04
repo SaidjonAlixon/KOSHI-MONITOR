@@ -102,6 +102,7 @@ public sealed class AgentUpdateWorker(ILogger<AgentUpdateWorker> logger) : Backg
         }
 
         logger.LogInformation("Installing agent update {Version} silently", release.Version);
+        UpgradeGate.Enter(TimeSpan.FromMinutes(15));
         // UseShellExecute detaches the installer so it survives the service restart it triggers.
         Process.Start(new ProcessStartInfo(temp, "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES") { UseShellExecute = true });
     }

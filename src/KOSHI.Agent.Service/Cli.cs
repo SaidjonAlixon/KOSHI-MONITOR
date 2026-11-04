@@ -23,6 +23,11 @@ public static class Cli
 
         if (args[0] == "deactivate")
         {
+            if (!UpgradeGate.IsOpen)
+            {
+                Console.Error.WriteLine("Deactivation is disabled.");
+                return 5;
+            }
             var rollback = AppLockerAdapter.Rollback();
             AgentStore.Delete();
             Console.WriteLine($"Deactivated. AppLocker: {rollback.Message}");

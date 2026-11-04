@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace KOSHI.Application.Services;
 
-public sealed class PolicyService(IKoshiDbContext db, AuditWriter audit, ICurrentUser currentUser, SettingsService settings, TimeProvider clock)
+public sealed class PolicyService(IKoshiDbContext db, AuditWriter audit, ICurrentUser currentUser, SettingsService settings, WebFilterService webFilter, TimeProvider clock)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -122,6 +122,100 @@ public sealed class PolicyService(IKoshiDbContext db, AuditWriter audit, ICurren
         return await GetAsync(id, ct);
     }
 
+    // ---------- Application scope (global vs per-device) ----------
+
+    /// <summary>Which policy the Applications page edits for the chosen target. Never creates a device policy.</summary>
+    public async Task<ApplicationScopeDto> GetScopeAsync(Guid? deviceId, CancellationToken ct = default)
+    {
+        var global = await EnsureGlobalPolicyAsync(ct);
+        if (deviceId is not { } id)
+            return new ApplicationScopeDto(global.Id, false, null, null, null, "Barcha kompyuterlar (standart)", false);
+
+        var device = await db.Devices.AsNoTracking().Include(d => d.Employee).FirstOrDefaultAsync(d => d.Id == id && d.DeletedAt == null, ct)
+                     ?? throw Errors.NotFound("Device");
+        var devicePolicyId = await db.PolicyAssignments
+            .Where(a => a.Scope == PolicyAssignmentScope.Device && a.DeviceId == id && a.Policy!.DeletedAt == null)
+            .Select(a => (Guid?)a.PolicyId).FirstOrDefaultAsync(ct);
+        var label = DeviceLabel(device);
+        return devicePolicyId is { } pid
+            ? new ApplicationScopeDto(pid, true, id, device.DisplayName, device.Employee?.FullName, label, false)
+            : new ApplicationScopeDto(global.Id, false, id, device.DisplayName, device.Employee?.FullName, label, true);
+    }
+
+    /// <summary>Creates (once) a device-specific policy seeded from the global one, so this computer can have its own rules.</summary>
+    public async Task<ApplicationScopeDto> EnsureDeviceScopeAsync(Guid deviceId, CancellationToken ct = default)
+    {
+        var device = await db.Devices.Include(d => d.Employee).FirstOrDefaultAsync(d => d.Id == deviceId && d.DeletedAt == null, ct)
+                     ?? throw Errors.NotFound("Device");
+        var existing = await db.PolicyAssignments
+            .AnyAsync(a => a.Scope == PolicyAssignmentScope.Device && a.DeviceId == deviceId && a.Policy!.DeletedAt == null, ct);
+        if (existing) return await GetScopeAsync(deviceId, ct);
+
+        var global = await EnsureGlobalPolicyAsync(ct);
+        var basePolicy = await db.Policies.Include(p => p.Rules).FirstAsync(p => p.Id == global.Id, ct);
+        var now = Now;
+        var policy = new Policy
+        {
+            Id = Guid.NewGuid(),
+            Name = $"{DeviceLabel(device)} — shaxsiy qoidalar",
+            Description = "Shu kompyuter uchun alohida dastur qoidalari (standart siyosatdan nusxalab olingan).",
+            Mode = basePolicy.Mode, Priority = 50, EffectiveFrom = now,
+            IdleThresholdSeconds = basePolicy.IdleThresholdSeconds, SamplingIntervalSeconds = basePolicy.SamplingIntervalSeconds,
+            HeartbeatIntervalSeconds = basePolicy.HeartbeatIntervalSeconds, WindowTitleCapture = basePolicy.WindowTitleCapture,
+            TrackBackgroundProcesses = basePolicy.TrackBackgroundProcesses, WorkScheduleId = basePolicy.WorkScheduleId,
+            CreatedAt = now, UpdatedAt = now, CreatedByUserId = currentUser.UserId,
+        };
+        policy.Assignments.Add(new PolicyAssignment { Id = Guid.NewGuid(), PolicyId = policy.Id, Scope = PolicyAssignmentScope.Device, DeviceId = deviceId, CreatedAt = now });
+        foreach (var r in basePolicy.Rules)
+            policy.Rules.Add(new ApplicationRule
+            {
+                Id = Guid.NewGuid(), PolicyId = policy.Id, Name = r.Name, ProcessName = r.ProcessName, PathPattern = r.PathPattern, Publisher = r.Publisher,
+                Classification = r.Classification, Restriction = r.Restriction, DailyLimitMinutes = r.DailyLimitMinutes,
+                RequirePassword = r.RequirePassword, PasswordSalt = r.PasswordSalt, PasswordHash = r.PasswordHash, CreatedAt = now, UpdatedAt = now,
+            });
+        db.Policies.Add(policy);
+        audit.Record("policy.device_scope_create", "Policy", policy.Id, new { deviceId, device.DisplayName });
+        await db.SaveChangesAsync(ct);
+        await PublishAsync(policy.Id, new PublishPolicyRequest { ApproveEnforcement = true, Note = "Shaxsiy qoidalar yaratildi" }, ct);
+        return await GetScopeAsync(deviceId, ct);
+    }
+
+    /// <summary>Removes a device-specific policy so the computer falls back to the global policy.</summary>
+    public async Task DeleteDeviceScopeAsync(Guid deviceId, CancellationToken ct = default)
+    {
+        var policyId = await db.PolicyAssignments
+            .Where(a => a.Scope == PolicyAssignmentScope.Device && a.DeviceId == deviceId && a.Policy!.DeletedAt == null)
+            .Select(a => (Guid?)a.PolicyId).FirstOrDefaultAsync(ct);
+        if (policyId is not { } id) return;
+        var policy = await db.Policies.FirstAsync(p => p.Id == id, ct);
+        policy.DeletedAt = Now;
+        policy.UpdatedAt = Now;
+        audit.Record("policy.device_scope_delete", "Policy", id, new { deviceId });
+        await db.SaveChangesAsync(ct);
+    }
+
+    private async Task<Policy> EnsureGlobalPolicyAsync(CancellationToken ct)
+    {
+        var all = await db.Policies.Include(p => p.Assignments).Where(p => p.DeletedAt == null).ToListAsync(ct);
+        var global = all.FirstOrDefault(p => p.Assignments.Any(a => a.Scope == PolicyAssignmentScope.AllDevices))
+                     ?? all.FirstOrDefault(p => p.Assignments.All(a => a.Scope != PolicyAssignmentScope.Device));
+        if (global is not null) return global;
+
+        var now = Now;
+        global = new Policy
+        {
+            Id = Guid.NewGuid(), Name = "Standart monitoring siyosati", Mode = PolicyMode.AuditOnly,
+            EffectiveFrom = now, WindowTitleCapture = WindowTitleCapture.Masked, CreatedAt = now, UpdatedAt = now,
+        };
+        global.Assignments.Add(new PolicyAssignment { Id = Guid.NewGuid(), PolicyId = global.Id, Scope = PolicyAssignmentScope.AllDevices, CreatedAt = now });
+        db.Policies.Add(global);
+        await db.SaveChangesAsync(ct);
+        return global;
+    }
+
+    private static string DeviceLabel(Device d) =>
+        d.Employee?.FullName is { Length: > 0 } name ? $"{name} ({d.DisplayName})" : d.DisplayName;
+
     // ---------- Application rules ----------
 
     public async Task<IReadOnlyList<ApplicationRuleDto>> ListRulesAsync(Guid? policyId, CancellationToken ct = default)
@@ -210,6 +304,8 @@ public sealed class PolicyService(IKoshiDbContext db, AuditWriter audit, ICurren
         if (device.Status == DeviceStatus.Revoked) throw Errors.CredentialRevoked();
         var s = await settings.GetAsync(ct);
         var protection = await settings.GetProtectionAsync(ct);
+        var controls = await settings.GetControlsAsync(ct);
+        var sites = await webFilter.ForDeviceAsync(deviceId, ct);
         var effective = await ResolveEffectiveAsync(device, ct);
         var snap = effective?.Snapshot;
         var schedule = snap?.WorkSchedule ?? await DefaultScheduleDtoAsync(ct);
@@ -232,7 +328,12 @@ public sealed class PolicyService(IKoshiDbContext db, AuditWriter audit, ICurren
             s.SupportContact,
             protection.Enabled,
             protection.Salt,
-            protection.Hash);
+            protection.Hash,
+            s.AgentLocationEnabled,
+            LocationIntervalSeconds: 300,
+            BlockedSites: sites,
+            VpnBlocked: controls.VpnBlocked,
+            InstallBlocked: controls.InstallBlocked && controls.ProtectionPasswordSet);
     }
 
     public async Task ReportResultAsync(Guid deviceId, PolicyResultReportRequest r, CancellationToken ct = default)

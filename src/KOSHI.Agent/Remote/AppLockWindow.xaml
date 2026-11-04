@@ -23,12 +23,12 @@
                     <StackPanel Orientation="Horizontal">
                         <Image Source="pack://application:,,,/Assets/koshi-icon.png" Width="36" Height="36" VerticalAlignment="Center" />
                         <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
-                            <TextBlock x:Name="TitleText" FontWeight="Bold" FontSize="16" Foreground="#0B1226" />
-                            <TextBlock Text="Kirish parol bilan cheklangan" FontSize="11.5" Foreground="#64748B" />
+                            <TextBlock x:Name="TitleText" FontWeight="Bold" FontSize="16" Foreground="#0B1226" TextWrapping="Wrap" MaxWidth="310" />
+                            <TextBlock x:Name="SubtitleText" Text="Kirish parol bilan cheklangan" FontSize="11.5" Foreground="#64748B" />
                         </StackPanel>
                     </StackPanel>
 
-                    <TextBlock Margin="0,14,0,0" TextWrapping="Wrap" FontSize="12.5" Foreground="#334155"
+                    <TextBlock x:Name="DescriptionText" Margin="0,14,0,0" TextWrapping="Wrap" FontSize="12.5" Foreground="#334155"
                                Text="Bu dastur administrator tomonidan parol bilan himoyalangan. Dasturni ochish uchun parolni kiriting, aks holda dastur yopiladi." />
 
                     <Grid Margin="0,14,0,0">

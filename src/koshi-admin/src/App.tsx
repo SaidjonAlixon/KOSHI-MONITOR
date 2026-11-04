@@ -27,6 +27,7 @@ const UsersPage = page(() => import('@/pages/UsersPage'), 'UsersPage')
 const SettingsPage = page(() => import('@/pages/SettingsPage'), 'SettingsPage')
 const SupportPage = page(() => import('@/pages/SupportPage'), 'SupportPage')
 const RemotePage = page(() => import('@/pages/RemotePage'), 'RemotePage')
+const LocationPage = page(() => import('@/pages/LocationPage'), 'LocationPage')
 
 function guarded(permission: Permission, element: ReactNode) {
   return (
@@ -50,6 +51,7 @@ export const routes: RouteObject[] = [
       { index: true, element: guarded(Permissions.DashboardRead, <DashboardPage />) },
       { path: 'live', element: guarded(Permissions.MonitoringLive, <LivePage />) },
       { path: 'timeline', element: guarded(Permissions.MonitoringRead, <TimelinePage />) },
+      { path: 'location', element: guarded(Permissions.LocationRead, <LocationPage />) },
       { path: 'employees', element: guarded(Permissions.EmployeesRead, <EmployeesPage />) },
       { path: 'devices', element: guarded(Permissions.DevicesRead, <DevicesPage />) },
       { path: 'applications', element: guarded(Permissions.PoliciesRead, <ApplicationsPage />) },

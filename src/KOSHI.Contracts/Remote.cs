@@ -11,10 +11,11 @@ public static class RemoteCommands
     public const string CancelShutdown = "cancel-shutdown";
     public const string KillProcess = "kill-process";
     public const string RefreshPolicy = "refresh-policy";
+    public const string LocateNow = "locate-now";
 
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
-        Lock, Message, Logoff, Restart, Shutdown, CancelShutdown, KillProcess, RefreshPolicy,
+        Lock, Message, Logoff, Restart, Shutdown, CancelShutdown, KillProcess, RefreshPolicy, LocateNow,
     };
 }
 

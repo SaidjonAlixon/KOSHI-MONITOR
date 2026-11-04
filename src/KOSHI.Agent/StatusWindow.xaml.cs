@@ -194,6 +194,7 @@ public partial class StatusWindow : Window
         MonitoringText.Text = s.MonitoringActive ? "Yoqilgan" : "To'xtatilgan";
         PolicyText.Text = s.PolicyName is null ? "standart" : $"{s.PolicyName} (v{s.PolicyVersion})";
         SyncText.Text = s.LastSync?.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss") ?? "—";
+        LocationText.Text = s.LocationInfo ?? "aniqlanmoqda…";
         if (_availableUpdate is null)
         {
             AutoUpdateText.Text = s.AutoUpdateEnabled ? "Bildirishnoma yoqilgan" : "Faqat qo‘lda";

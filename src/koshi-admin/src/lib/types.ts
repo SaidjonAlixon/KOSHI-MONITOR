@@ -161,6 +161,16 @@ export interface ApplicationSummary {
   classification: Classification | 'Mixed' | 'Unclassified'
 }
 
+export interface ApplicationScope {
+  policyId: string
+  isDevicePolicy: boolean
+  deviceId: string | null
+  deviceName: string | null
+  employeeName: string | null
+  label: string
+  inheritsFromGlobal: boolean
+}
+
 export interface ApplicationRule {
   id: string
   policyId: string
@@ -351,4 +361,64 @@ export interface SystemSettings {
   agentAutoUpdate: boolean
   agentProtectionEnabled: boolean
   agentProtectionPassword?: string | null
+  agentLocationEnabled: boolean
+}
+
+export interface SiteAllowance {
+  id: string
+  deviceId: string | null
+  deviceName: string | null
+  expiresAt: string
+  reason: string | null
+  createdBy: string | null
+  createdAt: string
+}
+
+export interface BlockedSite {
+  id: string
+  domain: string
+  category: string | null
+  note: string | null
+  isEnabled: boolean
+  createdAt: string
+  activeAllowances: SiteAllowance[]
+}
+
+export interface DeviceControls {
+  vpnBlocked: boolean
+  installBlocked: boolean
+  protectionPasswordSet: boolean
+}
+
+export type LocationSource = 'gps' | 'wifi' | 'cell' | 'windows' | 'ip'
+
+export interface DeviceLocation {
+  deviceId: string
+  deviceName: string
+  hostname: string | null
+  employeeName: string | null
+  departmentName: string | null
+  isOnline: boolean
+  latitude: number
+  longitude: number
+  accuracyMeters: number | null
+  source: LocationSource
+  city: string | null
+  region: string | null
+  country: string | null
+  isp: string | null
+  publicIp: string | null
+  firstSeenAt: string
+  lastSeenAt: string
+}
+
+export interface LocationPoint {
+  latitude: number
+  longitude: number
+  accuracyMeters: number | null
+  source: LocationSource
+  city: string | null
+  country: string | null
+  firstSeenAt: string
+  lastSeenAt: string
 }

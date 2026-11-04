@@ -8,7 +8,7 @@ namespace KOSHI.Application.Services;
 
 public sealed record RetentionCutoffs(DateTime Telemetry, DateTime Heartbeats, DateTime Audit, DateTime Tokens, DateTime Activations);
 
-public sealed record RetentionResult(int ApplicationEvents, int ActivitySessions, int UsageSummaries, int Heartbeats, int AuditLogs, int RefreshTokens, int Activations);
+public sealed record RetentionResult(int ApplicationEvents, int ActivitySessions, int UsageSummaries, int Heartbeats, int AuditLogs, int RefreshTokens, int Activations, int Locations);
 
 public sealed class MaintenanceService(IKoshiDbContext db, SettingsService settings, TimeProvider clock, ILogger<MaintenanceService> logger)
 {
@@ -33,7 +33,8 @@ public sealed class MaintenanceService(IKoshiDbContext db, SettingsService setti
             await db.DeviceHeartbeats.Where(e => e.ReceivedAt < c.Heartbeats).ExecuteDeleteAsync(ct),
             await db.AuditLogs.Where(e => e.OccurredAt < c.Audit).ExecuteDeleteAsync(ct),
             await db.RefreshTokens.Where(t => t.ExpiresAt < c.Tokens).ExecuteDeleteAsync(ct),
-            await db.DeviceActivations.Where(a => a.ExpiresAt < c.Activations && a.UsedAt == null).ExecuteDeleteAsync(ct));
+            await db.DeviceActivations.Where(a => a.ExpiresAt < c.Activations && a.UsedAt == null).ExecuteDeleteAsync(ct),
+            await db.DeviceLocations.Where(l => l.LastSeenAt < c.Telemetry).ExecuteDeleteAsync(ct));
 
         logger.LogInformation("Retention applied: {@Result}", result);
         return result;

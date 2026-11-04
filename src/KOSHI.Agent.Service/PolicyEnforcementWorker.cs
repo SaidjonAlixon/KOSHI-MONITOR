@@ -11,18 +11,50 @@ namespace KOSHI.Agent.Service;
 /// 1) AppLocker XML policy (on Enterprise/Education SKUs)
 /// 2) Windows Image File Execution Options (IFEO) kernel-level launch prevention
 /// 3) Fast 300ms SYSTEM process killer (catches already-running, portable, or renamed executables via FileVersionInfo)
+/// 4) Website blocking with timed exceptions and VPN blocking
 /// </summary>
 [SupportedOSPlatform("windows")]
-public sealed class PolicyEnforcementWorker(ILogger<PolicyEnforcementWorker> logger) : BackgroundService
+public sealed class PolicyEnforcementWorker(ILogger<PolicyEnforcementWorker> logger, PolicyState state) : BackgroundService
 {
     private const string IfeoBaseKey = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options";
     private const string KoshiMarkerValue = "KoshiBlocked";
 
     private (Guid? Id, int? Version, PolicyModeDto Mode, bool Approved)? _lastApplied;
-    private volatile AgentPolicyDto? _currentPolicy;
+    private readonly WebFilterEnforcer _webFilter = new(logger);
+    private readonly VpnBlocker _vpn = new(logger);
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        Task.WhenAll(PolicySyncLoop(stoppingToken), ProcessEnforcementLoop(stoppingToken));
+    protected override Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        state.LoadCache();
+        return Task.WhenAll(PolicySyncLoop(stoppingToken), ProcessEnforcementLoop(stoppingToken), NetworkControlsLoop(stoppingToken));
+    }
+
+    /// <summary>Re-evaluated every 3 s so timed site permissions expire on time even while offline.</summary>
+    private async Task NetworkControlsLoop(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                if (state.Current is { } policy)
+                {
+                    var now = DateTime.UtcNow;
+                    var blocked = (policy.BlockedSites ?? [])
+                        .Where(s => s.AllowedUntil is not { } until || until <= now)
+                        .Select(s => s.Domain)
+                        .ToList();
+                    if (policy.VpnBlocked) blocked.AddRange(VpnCatalog.Domains);
+                    _webFilter.Apply(blocked, policy.VpnBlocked);
+                    _vpn.Tick(policy.VpnBlocked);
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogDebug(ex, "Network controls tick failed");
+            }
+            await Task.Delay(TimeSpan.FromSeconds(3), ct);
+        }
+    }
 
     private async Task PolicySyncLoop(CancellationToken stoppingToken)
     {
@@ -44,7 +76,7 @@ public sealed class PolicyEnforcementWorker(ILogger<PolicyEnforcementWorker> log
             {
                 logger.LogError(ex, "Policy enforcement cycle failed");
             }
-            await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
+            await state.WaitForRefreshAsync(TimeSpan.FromSeconds(15), stoppingToken);
         }
     }
 
@@ -56,7 +88,7 @@ public sealed class PolicyEnforcementWorker(ILogger<PolicyEnforcementWorker> log
 
         using var api = new KoshiApiClient(config.ServerUrl, credential);
         var policy = await api.GetPolicyAsync(ct);
-        _currentPolicy = policy;
+        state.Set(policy);
 
         ApplyIfeoBlocks(policy);
 
@@ -81,7 +113,7 @@ public sealed class PolicyEnforcementWorker(ILogger<PolicyEnforcementWorker> log
         {
             try
             {
-                var policy = _currentPolicy;
+                var policy = state.Current;
                 if (policy?.Rules is { Count: > 0 } rules)
                 {
                     var blocked = rules

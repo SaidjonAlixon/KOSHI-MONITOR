@@ -44,7 +44,7 @@
                     <ColumnDefinition />
                 </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
-                    <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
+                    <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
                 </Grid.RowDefinitions>
                 <TextBlock Grid.Row="0" Text="Server:" Foreground="{StaticResource Muted}" FontSize="12" />
                 <TextBlock Grid.Row="0" Grid.Column="1" x:Name="ServerText" FontSize="12" />
@@ -64,6 +64,8 @@
                     <Button x:Name="CheckUpdateBtn" Content="Tekshirish" Margin="8,0,0,0" Padding="8,2" FontSize="11" Click="OnCheckUpdateClick"
                             Background="#F1F5F9" Foreground="#334155" BorderBrush="#CBD5E1" BorderThickness="1" Cursor="Hand" />
                 </StackPanel>
+                <TextBlock Grid.Row="7" Text="Joylashuv:" Foreground="{StaticResource Muted}" FontSize="12" Margin="0,4,0,0" />
+                <TextBlock Grid.Row="7" Grid.Column="1" x:Name="LocationText" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap" />
             </Grid>
             <Button x:Name="ActivateButton" Margin="0,12,0,0" Padding="12,6" HorizontalAlignment="Left" Content="Qurilmani aktivatsiya qilish…"
                     Click="OnActivate" Visibility="Collapsed" Background="#2F80FF" Foreground="White" BorderThickness="0" FontWeight="SemiBold" />

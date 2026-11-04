@@ -368,6 +368,24 @@ export function SettingsPage() {
           </div>
         </Card>
         <Card className="xl:col-span-2">
+          <CardHeader title="Joylashuv (GPS)" subtitle="Kompyuterlar qayerda ekanini “Joylashuv” bo‘limida xaritada ko‘rsatish" />
+          <div className="p-5">
+            <Checkbox
+              label={
+                <span>
+                  <span className="font-medium">Kompyuterlar joylashuvini aniqlash</span>
+                  <span className="block text-xs text-slate-500">
+                    Agent har 5 daqiqada joylashuvni yuboradi: GPS yoki Wi-Fi bo‘lsa — aniq (Windows joylashuv xizmati orqali), bo‘lmasa — IP manzil bo‘yicha taxminiy (shahar darajasida). Xodim agent oynasida joylashuv yuborilayotganini ko‘radi.
+                  </span>
+                </span>
+              }
+              disabled={!editable}
+              checked={form.agentLocationEnabled}
+              onChange={(e) => set({ agentLocationEnabled: e.target.checked })}
+            />
+          </div>
+        </Card>
+        <Card className="xl:col-span-2">
           <CardHeader title="Agentdagi xabarlar" subtitle="Xodim tray oynasida ko‘radi" />
           <div className="p-5">
             <Field label="Monitoring siyosati xabari">

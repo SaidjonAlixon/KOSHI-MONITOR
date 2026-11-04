@@ -22,6 +22,7 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'settings.manage': 'Sozlamalarni o‘zgartirish',
   'support.chat': 'Xodimlar bilan yordam chati',
   'remote.control': 'Masofaviy boshqaruv (ekran, buyruqlar)',
+  'location.read': 'Kompyuterlar joylashuvi (xarita va tarix)',
   'data.unscoped': 'Barcha bo‘limlar ma’lumotini ko‘rish',
   'roles.manage': 'Rollar va ruxsatlarni boshqarish (faqat Super Admin)',
 }
@@ -41,7 +42,16 @@ export const PERMISSION_GROUPS: Record<string, string> = {
   data: 'Ma’lumot doirasi',
   roles: 'Rollar',
   remote: 'Masofaviy boshqaruv',
+  location: 'Joylashuv',
 }
+
+export const LOCATION_SOURCE_LABELS = {
+  gps: 'GPS (aniq)',
+  wifi: 'Wi-Fi (aniq)',
+  cell: 'Mobil tarmoq',
+  windows: 'Windows joylashuv',
+  ip: 'IP bo‘yicha (taxminiy)',
+} as const
 
 export const CLASSIFICATION_LABELS = { Approved: 'Tasdiqlangan', NotApproved: 'Tasdiqlanmagan', Neutral: 'Neytral', Mixed: 'Aralash', Unclassified: 'Tasniflanmagan' } as const
 export const MODE_LABELS = { AuditOnly: 'Audit-only (faqat qayd)', Enforce: 'Enforcement (cheklash)' } as const

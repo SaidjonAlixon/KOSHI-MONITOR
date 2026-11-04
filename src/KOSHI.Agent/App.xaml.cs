@@ -77,8 +77,16 @@ public partial class App : System.Windows.Application
         };
 
         AgentRuntime? runtime = null;
-        var host = new WindowsRemoteHost(() => runtime?.RefreshPolicyNowAsync() ?? Task.CompletedTask);
-        runtime = new AgentRuntime(new WindowsActivitySource(), host, new AppLockHost(), _loggers.CreateLogger("KOSHI.Agent"));
+        var installGate = new InstallGateClient(_loggers.CreateLogger("KOSHI.Agent.InstallGate"));
+        installGate.Start(CancellationToken.None);
+        var host = new WindowsRemoteHost(
+            () =>
+            {
+                installGate.RequestServiceRefresh();
+                return runtime?.RefreshPolicyNowAsync() ?? Task.CompletedTask;
+            },
+            () => runtime?.LocateNowAsync() ?? Task.CompletedTask);
+        runtime = new AgentRuntime(new WindowsActivitySource(), host, new AppLockHost(), _loggers.CreateLogger("KOSHI.Agent"), new WindowsLocationProvider());
         _runtime = runtime;
         _runtime.StatusChanged += s => Dispatcher.BeginInvoke(() => Render(s));
         _runtime.ChatReceived += m => Dispatcher.BeginInvoke(() =>

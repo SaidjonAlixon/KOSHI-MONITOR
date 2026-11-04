@@ -82,6 +82,32 @@ public sealed class DeviceConnection
     public int? DurationSeconds => DisconnectedAt is { } d ? (int)Math.Max(0, (d - ConnectedAt).TotalSeconds) : null;
 }
 
+/// <summary>
+/// A position of a device. Consecutive reports at the same place extend <see cref="LastSeenAt"/> instead of
+/// adding rows, so the table is a compact "where and from when until when" history.
+/// </summary>
+public sealed class DeviceLocation
+{
+    public Guid Id { get; set; }
+    public Guid DeviceId { get; set; }
+    public Device? Device { get; set; }
+    public double Latitude { get; set; }
+    public double Longitude { get; set; }
+    public double? AccuracyMeters { get; set; }
+
+    /// <summary>gps / wifi / cell / windows (precise, Windows Location service) or ip (approximate).</summary>
+    public string Source { get; set; } = "windows";
+    public string? City { get; set; }
+    public string? Region { get; set; }
+    public string? Country { get; set; }
+    public string? Isp { get; set; }
+
+    /// <summary>Public IP address the report came from, as seen by the server.</summary>
+    public string? PublicIp { get; set; }
+    public DateTime FirstSeenAt { get; set; }
+    public DateTime LastSeenAt { get; set; }
+}
+
 public sealed class DeviceHeartbeat
 {
     public Guid Id { get; set; }

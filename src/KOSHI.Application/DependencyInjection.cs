@@ -29,6 +29,8 @@ public static class DependencyInjection
         services.AddScoped<OrganizationService>();
         services.AddScoped<MaintenanceService>();
         services.AddScoped<SupportService>();
+        services.AddScoped<LocationService>();
+        services.AddScoped<WebFilterService>();
         return services;
     }
 }

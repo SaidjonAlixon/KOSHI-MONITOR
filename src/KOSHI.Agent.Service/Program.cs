@@ -12,7 +12,10 @@ Log.Logger = new LoggerConfiguration().MinimumLevel.Information()
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddWindowsService(o => o.ServiceName = "KOSHIAgentService");
 builder.Services.AddSerilog();
+builder.Services.AddSingleton<PolicyState>();
 builder.Services.AddHostedService<PolicyEnforcementWorker>();
+builder.Services.AddHostedService<InstallGuard>();
+builder.Services.AddHostedService<UninstallGuard>();
 builder.Services.AddHostedService<SessionAgentWatchdog>();
 builder.Services.AddHostedService<AgentUpdateWorker>();
 

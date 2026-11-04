@@ -23,6 +23,9 @@ public sealed class KoshiDbContext(DbContextOptions<KoshiDbContext> options) : D
     public DbSet<DeviceCredential> DeviceCredentials => Set<DeviceCredential>();
     public DbSet<DeviceHeartbeat> DeviceHeartbeats => Set<DeviceHeartbeat>();
     public DbSet<DeviceConnection> DeviceConnections => Set<DeviceConnection>();
+    public DbSet<DeviceLocation> DeviceLocations => Set<DeviceLocation>();
+    public DbSet<BlockedSite> BlockedSites => Set<BlockedSite>();
+    public DbSet<SiteAllowance> SiteAllowances => Set<SiteAllowance>();
     public DbSet<ApplicationEvent> ApplicationEvents => Set<ApplicationEvent>();
     public DbSet<ActivitySession> ActivitySessions => Set<ActivitySession>();
     public DbSet<ApplicationUsageSummary> ApplicationUsageSummaries => Set<ApplicationUsageSummary>();
@@ -152,6 +155,37 @@ public sealed class KoshiDbContext(DbContextOptions<KoshiDbContext> options) : D
             e.Property(x => x.ConnectionId).HasMaxLength(64);
             e.HasIndex(x => new { x.DeviceId, x.ConnectedAt });
             e.HasIndex(x => x.DisconnectedAt);
+            e.HasOne(x => x.Device).WithMany().HasForeignKey(x => x.DeviceId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<DeviceLocation>(e =>
+        {
+            e.Property(x => x.Source).HasMaxLength(16).IsRequired();
+            e.Property(x => x.City).HasMaxLength(120);
+            e.Property(x => x.Region).HasMaxLength(120);
+            e.Property(x => x.Country).HasMaxLength(120);
+            e.Property(x => x.Isp).HasMaxLength(200);
+            e.Property(x => x.PublicIp).HasMaxLength(64);
+            e.HasIndex(x => new { x.DeviceId, x.LastSeenAt });
+            e.HasIndex(x => x.LastSeenAt);
+            e.HasOne(x => x.Device).WithMany().HasForeignKey(x => x.DeviceId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<BlockedSite>(e =>
+        {
+            e.Property(x => x.Domain).HasMaxLength(253).IsRequired();
+            e.Property(x => x.Category).HasMaxLength(60);
+            e.Property(x => x.Note).HasMaxLength(300);
+            e.HasIndex(x => x.Domain).IsUnique();
+        });
+
+        b.Entity<SiteAllowance>(e =>
+        {
+            e.Property(x => x.Reason).HasMaxLength(300);
+            e.Property(x => x.CreatedByEmail).HasMaxLength(254);
+            e.HasIndex(x => new { x.BlockedSiteId, x.ExpiresAt });
+            e.HasIndex(x => x.DeviceId);
+            e.HasOne(x => x.BlockedSite).WithMany(x => x.Allowances).HasForeignKey(x => x.BlockedSiteId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Device).WithMany().HasForeignKey(x => x.DeviceId).OnDelete(DeleteBehavior.Cascade);
         });
 

@@ -59,6 +59,10 @@ install -d /var/www/certbot
 if [[ ! -f /etc/nginx/sites-available/koshi.conf ]] || ! grep -q "managed by Certbot" /etc/nginx/sites-available/koshi.conf; then
   install -m 644 "$STAGE/server/nginx-koshi.conf" /etc/nginx/sites-available/koshi.conf
 fi
+# Certbot-managed configs are kept; make sure map tiles (Joylashuv page) are allowed by the CSP.
+if ! grep -q "tile.openstreetmap.org" /etc/nginx/sites-available/koshi.conf; then
+  sed -i "s#img-src 'self' data: blob:;#img-src 'self' data: blob: https://tile.openstreetmap.org;#g" /etc/nginx/sites-available/koshi.conf
+fi
 ln -sf /etc/nginx/sites-available/koshi.conf /etc/nginx/sites-enabled/koshi.conf
 if nginx -t 2>&1; then
   systemctl reload nginx

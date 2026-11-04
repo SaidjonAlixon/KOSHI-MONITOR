@@ -49,6 +49,9 @@ public sealed class KoshiApiClient : IDisposable
     public Task ReportPolicyResultAsync(PolicyResultReportRequest r, CancellationToken ct) =>
         SendAsync<object>(HttpMethod.Post, "api/agent/policy-results", r, ct);
 
+    public Task ReportLocationAsync(DeviceLocationReportRequest r, CancellationToken ct) =>
+        SendAsync<object>(HttpMethod.Post, "api/agent/location", r, ct);
+
     public Task<AgentSupportPollDto> PollSupportAsync(DateTime? since, CancellationToken ct) =>
         SendAsync<AgentSupportPollDto>(HttpMethod.Get, since is { } s ? $"api/agent/support?since={Uri.EscapeDataString(s.ToString("o"))}" : "api/agent/support", null, ct);
 
