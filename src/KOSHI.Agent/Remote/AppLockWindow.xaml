@@ -31,7 +31,13 @@
                     <TextBlock Margin="0,14,0,0" TextWrapping="Wrap" FontSize="12.5" Foreground="#334155"
                                Text="Bu dastur administrator tomonidan parol bilan himoyalangan. Dasturni ochish uchun parolni kiriting, aks holda dastur yopiladi." />
 
-                    <PasswordBox x:Name="PasswordInput" Margin="0,14,0,0" Padding="10,8" FontSize="14" />
+                    <Grid Margin="0,14,0,0">
+                        <PasswordBox x:Name="PasswordInput" Padding="10,8" FontSize="14" PasswordChanged="OnPasswordChanged" />
+                        <TextBox x:Name="PasswordPlain" Padding="10,8" FontSize="14" Visibility="Collapsed" TextChanged="OnPlainChanged" />
+                    </Grid>
+
+                    <CheckBox x:Name="ShowPwd" Margin="2,8,0,0" Content="Parolni ko‘rsatish" FontSize="12" Foreground="#475569"
+                              Checked="OnToggleShow" Unchecked="OnToggleShow" />
 
                     <TextBlock x:Name="ErrorText" Margin="0,8,0,0" Foreground="#DC2626" FontWeight="SemiBold" FontSize="12" Visibility="Collapsed" />
 

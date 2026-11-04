@@ -96,11 +96,7 @@ function generateProtectionPassword(): string {
 }
 
 function isValidProtectionPassword(p: string): boolean {
-  if (p.length !== 7) return false
-  const letters = (p.match(/[A-Za-z]/g) ?? []).length
-  const digits = (p.match(/[0-9]/g) ?? []).length
-  const symbols = (p.match(/[^A-Za-z0-9\s]/g) ?? []).length
-  return letters === 3 && digits === 2 && symbols === 2
+  return p.length === 7 && !/\s/.test(p)
 }
 
 function bumpPatch(version: string): string {
@@ -301,8 +297,8 @@ export function SettingsPage() {
               <div className="rounded-xl border border-slate-200 p-4 dark:border-white/10">
                 <Field
                   label="Himoya paroli (bo‘sh qoldirilsa — eskisi saqlanadi)"
-                  hint="Qoida: 7 xonali — 3 ta harf, 2 ta raqam, 2 ta belgi. Tizim o‘zi ham yaratib berishi mumkin."
-                  error={form.agentProtectionPassword && !isValidProtectionPassword(form.agentProtectionPassword) ? 'Parol 7 xonali bo‘lishi va 3 harf, 2 raqam, 2 belgidan iborat bo‘lishi kerak.' : undefined}
+                  hint="Aniq 7 ta belgi — istalgan harf/raqam/belgi. Tizim o‘zi ham yaratib berishi mumkin."
+                  error={form.agentProtectionPassword && !isValidProtectionPassword(form.agentProtectionPassword) ? 'Parol aniq 7 ta belgidan iborat bo‘lishi kerak (bo‘sh joysiz).' : undefined}
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <Input

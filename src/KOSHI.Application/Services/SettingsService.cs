@@ -107,7 +107,7 @@ public sealed class SettingsService(IKoshiDbContext db, AuditWriter audit, ICurr
             if (!string.IsNullOrEmpty(r.AgentProtectionPassword))
             {
                 if (!IsValidProtectionPassword(r.AgentProtectionPassword))
-                    throw Errors.Validation(nameof(r.AgentProtectionPassword), "Parol 7 xonali bo‘lishi va 3 ta harf, 2 ta raqam, 2 ta belgidan iborat bo‘lishi kerak.");
+                    throw Errors.Validation(nameof(r.AgentProtectionPassword), "Parol aniq 7 ta belgidan iborat bo‘lishi kerak (bo‘sh joysiz).");
                 var (salt, hash) = AppLockPassword.Create(r.AgentProtectionPassword);
                 values[Keys.AgentProtectionSalt] = salt;
                 values[Keys.AgentProtectionHash] = hash;
@@ -151,16 +151,9 @@ public sealed class SettingsService(IKoshiDbContext db, AuditWriter audit, ICurr
     private static bool Bool(Dictionary<string, string> m, string k, bool d) =>
         m.TryGetValue(k, out var v) ? v == "true" : d;
 
-    /// <summary>Protection password must be exactly 7 chars: 3 letters, 2 digits, 2 symbols.</summary>
-    public static bool IsValidProtectionPassword(string p)
-    {
-        if (string.IsNullOrEmpty(p) || p.Length != 7) return false;
-        int letters = p.Count(char.IsLetter);
-        int digits = p.Count(char.IsDigit);
-        int symbols = p.Count(c => !char.IsLetterOrDigit(c) && !char.IsWhiteSpace(c));
-        int spaces = p.Count(char.IsWhiteSpace);
-        return letters == 3 && digits == 2 && symbols == 2 && spaces == 0;
-    }
+    /// <summary>Protection password must be exactly 7 characters (any combination, no spaces).</summary>
+    public static bool IsValidProtectionPassword(string p) =>
+        !string.IsNullOrEmpty(p) && p.Length == 7 && !p.Any(char.IsWhiteSpace);
 
     private static string Str(Dictionary<string, string> m, string k, string d) =>
         m.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v) ? v : d;
