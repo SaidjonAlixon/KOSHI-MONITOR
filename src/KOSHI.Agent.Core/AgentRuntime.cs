@@ -56,7 +56,7 @@ public sealed class AgentRuntime : IAsyncDisposable
 {
     private static readonly TimeSpan FlushEvery = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan SplitOpenAfter = TimeSpan.FromMinutes(5);
-    private static readonly TimeSpan PolicyEvery = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan PolicyEvery = TimeSpan.FromSeconds(60);
 
     private readonly IActivitySource _source;
     private readonly IRemoteHost _remoteHost;

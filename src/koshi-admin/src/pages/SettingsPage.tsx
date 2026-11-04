@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarClock, Plus, Save, Upload } from 'lucide-react'
+import { CalendarClock, CheckCheck, Plus, Save, Upload } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Checkbox, Field, Input, Modal, PageHeader, Textarea } from '@/components/forms'
 import { Badge, Button, Card, CardHeader, ErrorState, LoadingState } from '@/components/ui'
@@ -207,6 +207,8 @@ export function SettingsPage() {
   const schedules = useQuery({ queryKey: ['schedules'], queryFn: () => api<WorkSchedule[]>('/api/schedules') })
   const [form, setForm] = useState<SystemSettings | null>(null)
   const [editingSchedule, setEditingSchedule] = useState<WorkSchedule | 'new' | null>(null)
+  const [protStatus, setProtStatus] = useState<'idle' | 'saved' | 'error'>('idle')
+  const [protError, setProtError] = useState<string | null>(null)
   useEffect(() => {
     if (q.data) setForm(q.data)
   }, [q.data])
@@ -219,6 +221,23 @@ export function SettingsPage() {
   if (q.isPending || !form) return <LoadingState />
   if (q.isError) return <ErrorState error={q.error} onRetry={() => q.refetch()} />
   const set = (patch: Partial<SystemSettings>) => setForm((f) => (f ? { ...f, ...patch } : f))
+  const setProt = (patch: Partial<SystemSettings>) => {
+    setProtStatus('idle')
+    setProtError(null)
+    set(patch)
+  }
+  const saveProtection = () => {
+    if (!form) return
+    setProtStatus('idle')
+    setProtError(null)
+    save.mutate(form, {
+      onSuccess: () => setProtStatus('saved'),
+      onError: (e) => {
+        setProtStatus('error')
+        setProtError(e instanceof ApiError ? [e.message, ...Object.values(e.errors).flat()].join(' ') : 'Saqlashda xatolik')
+      },
+    })
+  }
   const num = (k: keyof SystemSettings, label: string, hint: string, min: number, max: number, step = 1) => (
     <Field label={label} hint={hint}>
       <Input type="number" min={min} max={max} step={step} disabled={!editable} value={form[k] as number} onChange={(e) => set({ [k]: Number(e.target.value) } as Partial<SystemSettings>)} />
@@ -291,7 +310,7 @@ export function SettingsPage() {
               }
               disabled={!editable}
               checked={form.agentProtectionEnabled}
-              onChange={(e) => set({ agentProtectionEnabled: e.target.checked, ...(e.target.checked ? {} : { agentProtectionPassword: '' }) })}
+              onChange={(e) => setProt({ agentProtectionEnabled: e.target.checked, ...(e.target.checked ? {} : { agentProtectionPassword: '' }) })}
             />
             {form.agentProtectionEnabled && (
               <div className="rounded-xl border border-slate-200 p-4 dark:border-white/10">
@@ -306,13 +325,13 @@ export function SettingsPage() {
                       maxLength={7}
                       disabled={!editable}
                       value={form.agentProtectionPassword ?? ''}
-                      onChange={(e) => set({ agentProtectionPassword: e.target.value })}
+                      onChange={(e) => setProt({ agentProtectionPassword: e.target.value })}
                       placeholder="masalan: aB3!k9#"
                       className="w-48 font-mono tracking-widest"
                     />
                     {editable && (
                       <>
-                        <Button type="button" variant="secondary" onClick={() => set({ agentProtectionPassword: generateProtectionPassword() })}>
+                        <Button type="button" variant="secondary" onClick={() => setProt({ agentProtectionPassword: generateProtectionPassword() })}>
                           Avtomatik yaratish
                         </Button>
                         {form.agentProtectionPassword && (
@@ -325,6 +344,19 @@ export function SettingsPage() {
                   </div>
                 </Field>
                 <p className="mt-2 text-xs text-amber-600">Parolni eslab qoling yoki nusxa olib saqlang — xodimlar Windows Sozlamalarini ochish uchun aynan shu parolni so‘raydi.</p>
+              </div>
+            )}
+            {editable && (
+              <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4 dark:border-white/5">
+                <Button onClick={saveProtection} loading={save.isPending}>
+                  <Save className="size-4" /> Himoyani saqlash
+                </Button>
+                {protStatus === 'saved' && (
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                    <CheckCheck className="size-4" /> Saqlandi va qabul qilindi
+                  </span>
+                )}
+                {protStatus === 'error' && <span className="text-sm text-rose-600">{protError}</span>}
               </div>
             )}
           </div>

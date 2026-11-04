@@ -185,7 +185,7 @@ public sealed class AlertsController(AlertService alerts) : ControllerBase
 
 [ApiController]
 [Route("api")]
-public sealed class SystemController(SettingsService settings, DashboardService dashboard) : ControllerBase
+public sealed class SystemController(SettingsService settings, DashboardService dashboard, IHubContext<AgentHub> agents) : ControllerBase
 {
     [HttpGet("settings")]
     [Authorize(Policy = Permissions.SettingsRead)]
@@ -193,7 +193,13 @@ public sealed class SystemController(SettingsService settings, DashboardService 
 
     [HttpPut("settings")]
     [Authorize(Policy = Permissions.SettingsManage)]
-    public async Task<ActionResult<SystemSettingsDto>> UpdateSettings(UpdateSystemSettingsRequest r, CancellationToken ct) => Ok(await settings.UpdateAsync(r, ct));
+    public async Task<ActionResult<SystemSettingsDto>> UpdateSettings(UpdateSystemSettingsRequest r, CancellationToken ct)
+    {
+        var dto = await settings.UpdateAsync(r, ct);
+        // Push instantly to all agents so protection password / notices apply right away.
+        await agents.Clients.All.SendAsync("command", new RemoteCommandDto(Guid.NewGuid(), RemoteCommands.RefreshPolicy, null, "KOSHI"), ct);
+        return Ok(dto);
+    }
 
     [HttpGet("dashboard/summary")]
     [Authorize(Policy = Permissions.DashboardRead)]
