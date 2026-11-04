@@ -179,12 +179,26 @@ function AllowForm({ site, onDone, defaultDeviceId }: { site: BlockedSite; onDon
 export function SiteBlockCard({ manage, deviceId }: { manage: boolean; deviceId?: string }) {
   const invalidate = useInvalidateSites()
   const now = useNow()
-  const q = useQuery({ queryKey: ['blocked-sites'], queryFn: () => api<BlockedSite[]>('/api/web-filter/sites'), refetchInterval: 30_000 })
+  const q = useQuery({
+    queryKey: ['blocked-sites'],
+    queryFn: () => api<BlockedSite[]>('/api/web-filter/sites'),
+    refetchInterval: (query) => ((query.state.data ?? []).some((s) => s.activeAllowances.length > 0) ? 4_000 : 30_000),
+  })
   const [input, setInput] = useState('')
   const [category, setCategory] = useState<string>('Boshqa')
   const [search, setSearch] = useState('')
   const [allowFor, setAllowFor] = useState<BlockedSite | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const justExpired = (q.data ?? []).some((s) =>
+      s.activeAllowances.some((a) => {
+        const left = new Date(a.expiresAt).getTime() - now
+        return left <= 0 && left > -4000
+      }),
+    )
+    if (justExpired) void q.refetch()
+  }, [now, q.data, q.refetch])
 
   const add = useMutation({
     mutationFn: (body: { domains: string[]; category: string }) => api<BlockedSite[]>('/api/web-filter/sites', { method: 'POST', body }),
@@ -342,7 +356,7 @@ export function SiteBlockCard({ manage, deviceId }: { manage: boolean; deviceId?
         </div>
       )}
       <p className="border-t border-slate-100 px-5 py-3 text-xs text-slate-500 dark:border-white/5">
-        O‘zgarishlar ulangan kompyuterlarga darhol yuboriladi. Brauzerda sayt “administrator tomonidan bloklangan” deb ko‘rsatiladi.
+        O‘zgarishlar ulangan kompyuterlarga darhol yuboriladi. Vaqtli ruxsat tugashi bilan sayt avtomatik yana bloklanadi (YouTube video oqimi ham). Brauzerda “administrator tomonidan bloklangan” deb ko‘rsatiladi.
       </p>
 
       <Modal open={openAllow !== null} title="Vaqtli ruxsat berish" onClose={() => setAllowFor(null)} wide>

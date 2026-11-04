@@ -12,7 +12,7 @@ namespace KOSHI.Agent.Remote;
 public sealed class InstallGateClient(ILogger logger)
 {
     private static readonly TimeSpan PipeTimeout = TimeSpan.FromSeconds(3);
-    private readonly HashSet<Guid> _handled = [];
+    private readonly Dictionary<Guid, DateTime> _dismissed = [];
     private bool _showing;
 
     public void Start(CancellationToken ct) => _ = Task.Run(() => LoopAsync(ct), ct);
@@ -29,10 +29,12 @@ public sealed class InstallGateClient(ILogger logger)
                 var res = await GatePipe.SendAsync(new GateRequest { Op = GatePipe.OpPending }, PipeTimeout, ct);
                 if (res?.Pending is { Count: > 0 } pending && !_showing)
                 {
-                    var next = pending.FirstOrDefault(p => !_handled.Contains(p.Id));
+                    var cutoff = DateTime.UtcNow;
+                    foreach (var gone in _dismissed.Where(kv => kv.Value <= cutoff).Select(kv => kv.Key).ToList())
+                        _dismissed.Remove(gone);
+                    var next = pending.FirstOrDefault(p => !_dismissed.ContainsKey(p.Id));
                     if (next is not null)
                     {
-                        _handled.Add(next.Id);
                         _showing = true;
                         _ = Application.Current?.Dispatcher.BeginInvoke(() => Prompt(next));
                     }
@@ -54,8 +56,8 @@ public sealed class InstallGateClient(ILogger logger)
             var dialog = new AppLockWindow(
                 $"Yangi dastur o‘rnatish: {program}",
                 "Dastur o‘rnatish administrator paroli bilan cheklangan",
-                "Bu kompyuterga yangi dastur o‘rnatish taqiqlangan. O‘rnatishni davom ettirish uchun administrator parolini kiriting. " +
-                "Parol kiritilmasa yoki bekor qilinsa, o‘rnatish to‘xtatiladi.",
+                "Bu kompyuterga yangi dastur o‘rnatish taqiqlangan. Faqat shu o‘rnatish uchun administrator parolini kiriting. " +
+                "Bekor qilinsa yoki keyin boshqa (yoki shu) dasturni qayta o‘rnatmoqchi bo‘lsangiz, parol qayta so‘raladi.",
                 "O‘rnatishga ruxsat",
                 password =>
                 {
@@ -65,7 +67,10 @@ public sealed class InstallGateClient(ILogger logger)
                 },
                 timeoutSeconds: 150);
             if (dialog.ShowDialog() != true)
+            {
+                _dismissed[install.Id] = DateTime.UtcNow.AddSeconds(8);
                 _ = GatePipe.SendAsync(new GateRequest { Op = GatePipe.OpDeny, Id = install.Id }, PipeTimeout);
+            }
         }
         finally
         {

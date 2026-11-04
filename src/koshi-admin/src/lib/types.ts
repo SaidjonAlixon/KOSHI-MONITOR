@@ -361,6 +361,7 @@ export interface SystemSettings {
   agentAutoUpdate: boolean
   agentProtectionEnabled: boolean
   agentProtectionPassword?: string | null
+  agentProtectionPasswordSet?: boolean
   agentLocationEnabled: boolean
 }
 

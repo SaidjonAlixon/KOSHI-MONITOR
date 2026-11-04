@@ -66,7 +66,8 @@ public sealed class SettingsService(IKoshiDbContext db, AuditWriter audit, ICurr
             Dbl(map, Keys.MinimumCoverage, d.MinimumCoverage),
             Bool(map, Keys.AgentAutoUpdate, d.AgentAutoUpdate),
             Bool(map, Keys.AgentProtectionEnabled, d.AgentProtectionEnabled),
-            Bool(map, Keys.AgentLocationEnabled, d.AgentLocationEnabled));
+            Bool(map, Keys.AgentLocationEnabled, d.AgentLocationEnabled),
+            AgentProtectionPasswordSet: !string.IsNullOrEmpty(map.GetValueOrDefault(Keys.AgentProtectionHash)));
     }
 
     /// <summary>Returns the Windows-Settings protection state and password verifier for agents.</summary>

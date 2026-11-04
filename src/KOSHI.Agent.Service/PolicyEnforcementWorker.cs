@@ -40,7 +40,7 @@ public sealed class PolicyEnforcementWorker(ILogger<PolicyEnforcementWorker> log
                 {
                     var now = DateTime.UtcNow;
                     var blocked = (policy.BlockedSites ?? [])
-                        .Where(s => s.AllowedUntil is not { } until || until <= now)
+                        .Where(s => !AllowanceActive(s.AllowedUntil, now))
                         .Select(s => s.Domain)
                         .ToList();
                     if (policy.VpnBlocked) blocked.AddRange(VpnCatalog.Domains);
@@ -226,5 +226,14 @@ public sealed class PolicyEnforcementWorker(ILogger<PolicyEnforcementWorker> log
         var n = Path.GetFileName(name.Trim());
         if (string.IsNullOrEmpty(n)) return string.Empty;
         return n.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? n : $"{n}.exe";
+    }
+
+    /// <summary>Timed site permission is still valid (UTC, even if JSON deserialized the timestamp as Unspecified).</summary>
+    private static bool AllowanceActive(DateTime? until, DateTime utcNow)
+    {
+        if (until is not { } t) return false;
+        if (t.Kind == DateTimeKind.Unspecified) t = DateTime.SpecifyKind(t, DateTimeKind.Utc);
+        else t = t.ToUniversalTime();
+        return t > utcNow;
     }
 }

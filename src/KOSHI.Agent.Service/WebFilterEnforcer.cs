@@ -27,14 +27,30 @@ public sealed class WebFilterEnforcer(ILogger logger)
         @"SOFTWARE\Policies\BraveSoftware\Brave",
         @"SOFTWARE\Policies\YandexBrowser",
         @"SOFTWARE\Policies\Chromium",
+        @"SOFTWARE\Policies\Opera Software\Opera",
+        @"SOFTWARE\Policies\Opera Software\Opera GX",
     ];
     private const string FirefoxRoot = @"SOFTWARE\Policies\Mozilla\Firefox";
+
+    /// <summary>When a well-known site is blocked, also block its CDNs so a timer expiry actually stops video/feed playback.</summary>
+    private static readonly Dictionary<string, string[]> Companions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["youtube.com"] = ["youtu.be", "googlevideo.com", "ytimg.com", "youtube-nocookie.com", "ggpht.com", "yt3.ggpht.com"],
+        ["youtu.be"] = ["youtube.com", "googlevideo.com", "ytimg.com", "youtube-nocookie.com"],
+        ["instagram.com"] = ["cdninstagram.com", "fbcdn.net"],
+        ["facebook.com"] = ["fbcdn.net", "facebook.net"],
+        ["tiktok.com"] = ["tiktokcdn.com", "tiktokv.com", "musical.ly"],
+        ["x.com"] = ["twitter.com", "twimg.com"],
+        ["twitter.com"] = ["x.com", "twimg.com"],
+        ["netflix.com"] = ["nflxvideo.net", "nflximg.net"],
+        ["twitch.tv"] = ["jtvnw.net", "ttvnw.net"],
+    };
 
     private string? _lastSignature;
 
     public void Apply(IReadOnlyCollection<string> blockedDomains, bool forceDirectConnection)
     {
-        var domains = blockedDomains.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(d => d, StringComparer.Ordinal).ToList();
+        var domains = Expand(blockedDomains);
         var signature = $"{string.Join('|', domains)}#{forceDirectConnection}";
         if (signature == _lastSignature) return;
 
@@ -114,7 +130,12 @@ public sealed class WebFilterEnforcer(ILogger logger)
             if (domains.Count > 0)
             {
                 using var list = key.CreateSubKey("URLBlocklist", writable: true);
-                for (var i = 0; i < domains.Count; i++) list.SetValue((i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), domains[i], RegistryValueKind.String);
+                var n = 1;
+                foreach (var d in domains)
+                {
+                    foreach (var pattern in ChromiumPatterns(d))
+                        list.SetValue((n++).ToString(System.Globalization.CultureInfo.InvariantCulture), pattern, RegistryValueKind.String);
+                }
                 key.SetValue("DnsOverHttpsMode", "off", RegistryValueKind.String);
             }
             else
@@ -162,5 +183,31 @@ public sealed class WebFilterEnforcer(ILogger logger)
     {
         using var p = Process.Start(new ProcessStartInfo("ipconfig.exe", "/flushdns") { CreateNoWindow = true, UseShellExecute = false, WindowStyle = ProcessWindowStyle.Hidden });
         p?.WaitForExit(5000);
+    }
+
+    private static List<string> Expand(IReadOnlyCollection<string> blocked)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var raw in blocked)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) continue;
+            var host = raw.Trim().TrimStart('*', '.').ToLowerInvariant();
+            if (host.Length == 0) continue;
+            set.Add(host);
+            if (Companions.TryGetValue(host, out var extra))
+                foreach (var e in extra) set.Add(e);
+        }
+        return set.OrderBy(d => d, StringComparer.Ordinal).ToList();
+    }
+
+    private static IEnumerable<string> ChromiumPatterns(string domain)
+    {
+        yield return domain;
+        yield return $"*.{domain}";
+        yield return $"www.{domain}";
+        yield return $"https://{domain}";
+        yield return $"https://*.{domain}";
+        yield return $"http://{domain}";
+        yield return $"http://*.{domain}";
     }
 }

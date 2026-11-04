@@ -16,14 +16,13 @@ namespace KOSHI.Agent.Service;
 /// <summary>
 /// Software-installation lock. Every installer started in a user session — normally or with "Run as administrator",
 /// setup EXE, MSI, winget, App Installer or Microsoft Store — is frozen (NtSuspendProcess) the moment it starts.
-/// The tray agent asks for the protection password; only the service verifies it. Correct password resumes the installer
-/// and opens a 10-minute install window for that session; wrong password (3x), cancel or 3 minutes without an answer
-/// kill the installer. Uninstallers and updates of already installed programs (Program Files) are not affected.
+/// The tray agent asks for the protection password; only the service verifies it. Correct password resumes that
+/// installer (and its child processes) only — the next setup asks again. Cancel, wrong password (3x) or no answer
+/// in 3 minutes kills that installer. Uninstallers and updates of already installed programs (Program Files) are not affected.
 /// </summary>
 [SupportedOSPlatform("windows")]
 public sealed partial class InstallGuard(PolicyState state, ILogger<InstallGuard> logger) : BackgroundService
 {
-    private static readonly TimeSpan InstallWindow = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan PendingTimeout = TimeSpan.FromMinutes(3);
     private const int MaxAttempts = 3;
 
@@ -47,7 +46,6 @@ public sealed partial class InstallGuard(PolicyState state, ILogger<InstallGuard
     private readonly Lock _gate = new();
     private readonly Dictionary<int, DateTime> _seen = [];
     private readonly HashSet<int> _approved = [];
-    private readonly Dictionary<int, DateTime> _sessionWindows = [];
     private readonly Dictionary<Guid, PendingInstall> _pending = [];
     private readonly Dictionary<string, bool> _installerCache = new(StringComparer.OrdinalIgnoreCase);
     private bool _firstScan = true;
@@ -99,7 +97,6 @@ public sealed partial class InstallGuard(PolicyState state, ILogger<InstallGuard
 
     private void Scan()
     {
-        var now = DateTime.UtcNow;
         var alive = new HashSet<int>();
         foreach (var p in Process.GetProcesses())
         {
@@ -123,7 +120,7 @@ public sealed partial class InstallGuard(PolicyState state, ILogger<InstallGuard
                     if (_seen.TryGetValue(p.Id, out var known) && known == started) continue;
                     _seen[p.Id] = started;
                 }
-                if (!_firstScan) Evaluate(p, session, now);
+                if (!_firstScan) Evaluate(p, session);
             }
             finally
             {
@@ -144,7 +141,7 @@ public sealed partial class InstallGuard(PolicyState state, ILogger<InstallGuard
         _firstScan = false;
     }
 
-    private void Evaluate(Process p, int session, DateTime now)
+    private void Evaluate(Process p, int session)
     {
         var pid = p.Id;
         var parent = Native.ParentPid(pid);
@@ -168,28 +165,16 @@ public sealed partial class InstallGuard(PolicyState state, ILogger<InstallGuard
         var path = Native.ImagePath(pid);
         if (!IsInstaller(name, path, out var description)) return;
 
-        lock (_gate)
-        {
-            if (_sessionWindows.TryGetValue(session, out var until) && until > now)
-            {
-                _approved.Add(pid);
-                return;
-            }
-        }
         if (IsTrustedKoshiSetup(name, path))
         {
-            lock (_gate)
-            {
-                _approved.Add(pid);
-                _sessionWindows[session] = now.AddMinutes(5);
-            }
+            lock (_gate) _approved.Add(pid);
             return;
         }
 
         Native.Suspend(pid);
         var pending = new PendingInstall
         {
-            Id = Guid.NewGuid(), Session = session, Name = name, Path = path, Description = description, DetectedAt = now,
+            Id = Guid.NewGuid(), Session = session, Name = name, Path = path, Description = description, DetectedAt = DateTime.UtcNow,
         };
         pending.Pids.Add(pid);
         lock (_gate) _pending[pending.Id] = pending;
@@ -296,7 +281,6 @@ public sealed partial class InstallGuard(PolicyState state, ILogger<InstallGuard
         {
             expired = _pending.Values.Where(g => now - g.DetectedAt > PendingTimeout).ToList();
             foreach (var g in expired) _pending.Remove(g.Id);
-            foreach (var s in _sessionWindows.Where(w => w.Value <= now).Select(w => w.Key).ToList()) _sessionWindows.Remove(s);
         }
         foreach (var g in expired)
         {
@@ -315,7 +299,6 @@ public sealed partial class InstallGuard(PolicyState state, ILogger<InstallGuard
             _pending.Clear();
             _seen.Clear();
             _approved.Clear();
-            _sessionWindows.Clear();
             _firstScan = true;
         }
         foreach (var g in all) g.Pids.ForEach(Native.Resume);
@@ -442,11 +425,10 @@ public sealed partial class InstallGuard(PolicyState state, ILogger<InstallGuard
             {
                 _pending.Remove(id);
                 foreach (var pid in g.Pids) _approved.Add(pid);
-                _sessionWindows[session] = DateTime.UtcNow.Add(InstallWindow);
             }
             g.Pids.ForEach(Native.Resume);
-            logger.LogInformation("Installer {Name} approved with password; install window open for {Minutes} min", g.Name, InstallWindow.TotalMinutes);
-            return new GateResponse { Ok = true, Closed = true, Message = "O‘rnatishga ruxsat berildi" };
+            logger.LogInformation("Installer {Name} approved with password; further setups will ask again", g.Name);
+            return new GateResponse { Ok = true, Closed = true, Message = "Shu o‘rnatishga ruxsat. Keyingi dastur uchun parol qayta so‘raladi." };
         }
 
         bool exhausted;

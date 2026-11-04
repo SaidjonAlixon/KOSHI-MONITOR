@@ -215,13 +215,25 @@ export function SettingsPage() {
   const [editingSchedule, setEditingSchedule] = useState<WorkSchedule | 'new' | null>(null)
   const [protStatus, setProtStatus] = useState<'idle' | 'saved' | 'error'>('idle')
   const [protError, setProtError] = useState<string | null>(null)
+  const [draftPassword, setDraftPassword] = useState('')
   useEffect(() => {
-    if (q.data) setForm(q.data)
+    if (q.data) {
+      setForm(q.data)
+      setDraftPassword('')
+    }
   }, [q.data])
 
+  const payload = (s: SystemSettings): SystemSettings => ({
+    ...s,
+    agentProtectionPassword: draftPassword.trim() || undefined,
+  })
+
   const save = useMutation({
-    mutationFn: (s: SystemSettings) => api<SystemSettings>('/api/settings', { method: 'PUT', body: s }),
-    onSuccess: (s) => qc.setQueryData(['settings'], s),
+    mutationFn: (s: SystemSettings) => api<SystemSettings>('/api/settings', { method: 'PUT', body: payload(s) }),
+    onSuccess: (s) => {
+      qc.setQueryData(['settings'], s)
+      setDraftPassword('')
+    },
   })
 
   if (q.isPending || !form) return <LoadingState />
@@ -236,6 +248,16 @@ export function SettingsPage() {
     if (!form) return
     setProtStatus('idle')
     setProtError(null)
+    if (form.agentProtectionEnabled && !form.agentProtectionPasswordSet && !isValidProtectionPassword(draftPassword)) {
+      setProtStatus('error')
+      setProtError('Himoyani yoqish uchun 7 belgilik parol kiriting.')
+      return
+    }
+    if (draftPassword && !isValidProtectionPassword(draftPassword)) {
+      setProtStatus('error')
+      setProtError('Parol aniq 7 ta belgidan iborat bo‘lishi kerak (bo‘sh joysiz).')
+      return
+    }
     save.mutate(form, {
       onSuccess: () => setProtStatus('saved'),
       onError: (e) => {
@@ -320,28 +342,38 @@ export function SettingsPage() {
             />
             {form.agentProtectionEnabled && (
               <div className="rounded-xl border border-slate-200 p-4 dark:border-white/10">
+                {form.agentProtectionPasswordSet && !draftPassword && (
+                  <p className="mb-3 inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                    <CheckCheck className="size-4" /> Parol o‘rnatilgan va saqlangan — sahifa yangilansa ham o‘chmaydi
+                  </p>
+                )}
                 <Field
-                  label="Himoya paroli (bo‘sh qoldirilsa — eskisi saqlanadi)"
+                  label={form.agentProtectionPasswordSet ? 'Yangi parol (bo‘sh qoldirilsa — eskisi saqlanadi)' : 'Himoya paroli'}
                   hint="Aniq 7 ta belgi — istalgan harf/raqam/belgi. Tizim o‘zi ham yaratib berishi mumkin."
-                  error={form.agentProtectionPassword && !isValidProtectionPassword(form.agentProtectionPassword) ? 'Parol aniq 7 ta belgidan iborat bo‘lishi kerak (bo‘sh joysiz).' : undefined}
+                  error={draftPassword && !isValidProtectionPassword(draftPassword) ? 'Parol aniq 7 ta belgidan iborat bo‘lishi kerak (bo‘sh joysiz).' : undefined}
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <Input
                       type="text"
                       maxLength={7}
                       disabled={!editable}
-                      value={form.agentProtectionPassword ?? ''}
-                      onChange={(e) => setProt({ agentProtectionPassword: e.target.value })}
-                      placeholder="masalan: aB3!k9#"
+                      value={draftPassword}
+                      onChange={(e) => {
+                        setProtStatus('idle')
+                        setProtError(null)
+                        setDraftPassword(e.target.value)
+                      }}
+                      placeholder={form.agentProtectionPasswordSet ? '•••••••' : 'masalan: aB3!k9#'}
                       className="w-48 font-mono tracking-widest"
+                      autoComplete="new-password"
                     />
                     {editable && (
                       <>
-                        <Button type="button" variant="secondary" onClick={() => setProt({ agentProtectionPassword: generateProtectionPassword() })}>
+                        <Button type="button" variant="secondary" onClick={() => { setProtStatus('idle'); setDraftPassword(generateProtectionPassword()) }}>
                           Avtomatik yaratish
                         </Button>
-                        {form.agentProtectionPassword && (
-                          <Button type="button" variant="ghost" onClick={() => navigator.clipboard.writeText(form.agentProtectionPassword ?? '')}>
+                        {draftPassword && (
+                          <Button type="button" variant="ghost" onClick={() => navigator.clipboard.writeText(draftPassword)}>
                             Nusxa olish
                           </Button>
                         )}
@@ -349,7 +381,7 @@ export function SettingsPage() {
                     )}
                   </div>
                 </Field>
-                <p className="mt-2 text-xs text-amber-600">Parolni eslab qoling yoki nusxa olib saqlang — xodimlar Windows Sozlamalarini ochish uchun aynan shu parolni so‘raydi.</p>
+                <p className="mt-2 text-xs text-amber-600">Parolni eslab qoling yoki nusxa olib saqlang — xodimlar Windows Sozlamalarini ochish uchun aynan shu parolni so‘raydi. Parol serverda shifrlangan holda saqlanadi, shu bois qayta ochilganda ko‘rinmaydi.</p>
               </div>
             )}
             {editable && (

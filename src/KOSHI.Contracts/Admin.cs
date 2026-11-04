@@ -593,7 +593,8 @@ public sealed record SystemSettingsDto(
     double MinimumCoverage,
     bool AgentAutoUpdate,
     bool AgentProtectionEnabled = false,
-    bool AgentLocationEnabled = true);
+    bool AgentLocationEnabled = true,
+    bool AgentProtectionPasswordSet = false);
 
 public sealed class UpdateSystemSettingsRequest
 {
@@ -636,8 +637,8 @@ public sealed class UpdateSystemSettingsRequest
     /// <summary>Require the admin protection password to open Windows Settings (blocks uninstall path) on agents.</summary>
     public bool AgentProtectionEnabled { get; set; }
 
-    /// <summary>New protection password (plaintext). Leave null to keep the existing one.</summary>
-    [StringLength(128, MinimumLength = 4)]
+    /// <summary>New protection password (plaintext). Null or empty keeps the existing hash.</summary>
+    [StringLength(7)]
     public string? AgentProtectionPassword { get; set; }
 
     /// <summary>Agents report the device position (Windows Location: GPS / Wi-Fi; falls back to approximate IP location).</summary>
