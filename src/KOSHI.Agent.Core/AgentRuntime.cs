@@ -63,6 +63,7 @@ public sealed class AgentRuntime : IAsyncDisposable
     private readonly IAppLockHost _appLockHost;
     private readonly ILogger _logger;
     private readonly Dictionary<string, DateTime> _unlockedApps = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _unlockHiddenPolls = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<Guid> _seenMessages = [];
     private readonly List<ChatMessage> _chatHistory = [];
     private DateTime? _chatSince;
@@ -364,47 +365,84 @@ public sealed class AgentRuntime : IAsyncDisposable
         }
     }
 
+    // After unlock: ignore a few empty polls (UWP Settings can flicker) then re-lock only once
+    // the window stays gone — never kill the process. Closing with X then reopening asks again.
+    private const int UnlockGraceSeconds = 5;
+    private const int UnlockHiddenPollsBeforeRelock = 12;
+
     private void EnforcePasswordLock(AgentApplicationRuleDto rule, HashSet<string> runningNames, string? normFg)
     {
         var target = NormalizeProc(rule.ProcessName);
         if (string.IsNullOrEmpty(target)) return;
 
-        var isRunning = runningNames.Contains(target)
-                        || (normFg is not null && string.Equals(normFg, target, StringComparison.OrdinalIgnoreCase));
-
-        if (!isRunning)
-        {
-            lock (_gate) _unlockedApps.Remove(target);
-            return;
-        }
+        var isForeground = normFg is not null && string.Equals(normFg, target, StringComparison.OrdinalIgnoreCase);
+        var isRunning = runningNames.Contains(target) || isForeground;
+        var hasWindow = isForeground || _appLockHost.HasActiveVisibleWindow(rule.ProcessName);
 
         bool isUnlocked;
         DateTime unlockedAt;
         lock (_gate) isUnlocked = _unlockedApps.TryGetValue(target, out unlockedAt);
 
-        if (isUnlocked)
+        if (!isRunning && !hasWindow)
         {
-            // Once unlocked, re-lock (and close) after the user hides/closes the window (4s grace window for restore).
-            if ((DateTime.UtcNow - unlockedAt).TotalSeconds >= 4.0 && !_appLockHost.HasActiveVisibleWindow(rule.ProcessName))
-            {
-                lock (_gate) _unlockedApps.Remove(target);
-                _appLockHost.TerminateApp(rule.ProcessName);
-            }
+            if (isUnlocked) CountHiddenPollAndMaybeRelock(target);
+            else ClearUnlock(target);
             return;
         }
 
-        // Running and NOT unlocked: freeze immediately and demand the password.
-        if (_appLockHost.ChallengeAndEnforce(rule))
+        if (isUnlocked)
         {
-            lock (_gate) _unlockedApps[target] = DateTime.UtcNow;
+            if ((DateTime.UtcNow - unlockedAt).TotalSeconds < UnlockGraceSeconds || hasWindow)
+            {
+                ResetHiddenPolls(target);
+                return;
+            }
+            CountHiddenPollAndMaybeRelock(target);
+            return;
         }
-        else
+
+        // Only challenge when the window is actually visible on screen (avoids prompting for suspended/background apps).
+        if (!hasWindow) return;
+
+        if (_appLockHost.ChallengeAndEnforce(rule))
         {
             lock (_gate)
             {
-                _unlockedApps.Remove(target);
-                _tracker.AddViolation(rule.ProcessName, DateTime.UtcNow, "password_denied");
+                _unlockedApps[target] = DateTime.UtcNow;
+                _unlockHiddenPolls[target] = 0;
             }
+        }
+        else
+        {
+            ClearUnlock(target);
+            lock (_gate) _tracker.AddViolation(rule.ProcessName, DateTime.UtcNow, "password_denied");
+        }
+    }
+
+    private void ResetHiddenPolls(string target)
+    {
+        lock (_gate) _unlockHiddenPolls[target] = 0;
+    }
+
+    private void CountHiddenPollAndMaybeRelock(string target)
+    {
+        lock (_gate)
+        {
+            _unlockHiddenPolls.TryGetValue(target, out var n);
+            n++;
+            _unlockHiddenPolls[target] = n;
+            if (n < UnlockHiddenPollsBeforeRelock) return;
+            _unlockedApps.Remove(target);
+            _unlockHiddenPolls.Remove(target);
+        }
+    }
+
+    private void ClearUnlock(string target)
+    {
+        lock (_gate)
+        {
+            _unlockedApps.Remove(target);
+            _unlockHiddenPolls.Remove(target);
         }
     }
 

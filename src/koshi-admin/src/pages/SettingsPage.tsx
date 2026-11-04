@@ -171,7 +171,7 @@ function AgentReleaseManager({ editable }: { editable: boolean }) {
 
       {editable && (
         <form
-          className="mt-4 flex flex-wrap items-end gap-3 border-t border-slate-100 pt-4 dark:border-white/5"
+          className="mt-4 space-y-4 border-t border-slate-100 pt-4 dark:border-white/5"
           onSubmit={(e) => {
             e.preventDefault()
             setError(null)
@@ -179,18 +179,24 @@ function AgentReleaseManager({ editable }: { editable: boolean }) {
             publish.mutate()
           }}
         >
-          <Field label="Yangi versiya (X.Y.Z)" hint={rel ? `Joriy: ${rel.version} — keyingisi ${nextVersion}` : undefined}>
-            <Input value={version} onChange={(e) => setVersion(e.target.value)} placeholder={nextVersion} pattern="^\d+\.\d+\.\d+$" required className="w-40" />
-          </Field>
-          <Field label="Installer (EXE)">
-            <Input type="file" accept=".exe,application/octet-stream" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required className="w-72" />
-          </Field>
-          <Button type="button" variant="secondary" onClick={() => setVersion(nextVersion)}>
-            {nextVersion} ni qo‘yish
-          </Button>
-          <Button type="submit" loading={publish.isPending} disabled={!file || !version}>
-            <Upload className="size-4" /> Chiqarish
-          </Button>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Yangi versiya (X.Y.Z)">
+              <div className="flex items-center gap-2">
+                <Input value={version} onChange={(e) => setVersion(e.target.value)} placeholder={nextVersion} pattern="^\d+\.\d+\.\d+$" required className="w-32" />
+                <button type="button" onClick={() => setVersion(nextVersion)} className="whitespace-nowrap rounded-lg border border-slate-200 px-2.5 py-2 text-xs text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5">
+                  {nextVersion} ni qo‘yish
+                </button>
+              </div>
+            </Field>
+            <Field label="Installer (EXE fayl)">
+              <Input type="file" accept=".exe,application/octet-stream" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required className="w-full" />
+            </Field>
+          </div>
+          <div className="flex justify-end">
+            <Button type="submit" loading={publish.isPending} disabled={!file || !version}>
+              <Upload className="size-4" /> Chiqarish
+            </Button>
+          </div>
         </form>
       )}
       {error && <p className="mt-2 text-xs text-rose-600">{error}</p>}

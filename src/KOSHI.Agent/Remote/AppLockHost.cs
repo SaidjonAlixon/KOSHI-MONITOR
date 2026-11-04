@@ -30,6 +30,9 @@ public sealed class AppLockHost : IAppLockHost
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(nint hWnd, out uint lpdwProcessId);
 
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern nint FindWindowEx(nint hWndParent, nint hWndChildAfter, string? lpszClass, string? lpszWindow);
+
     [DllImport("user32.dll")]
     private static extern bool IsWindowVisible(nint hWnd);
 
@@ -63,8 +66,7 @@ public sealed class AppLockHost : IAppLockHost
         EnumWindows((hWnd, _) =>
         {
             if (!IsWindowVisible(hWnd) || IsIconic(hWnd)) return true;
-            GetWindowThreadProcessId(hWnd, out var pid);
-            if (pids.Contains(pid))
+            if (WindowBelongsToPids(hWnd, pids))
             {
                 foundVisible = true;
                 return false;
@@ -72,6 +74,28 @@ public sealed class AppLockHost : IAppLockHost
             return true;
         }, 0);
         return foundVisible;
+    }
+
+    private static bool WindowBelongsToPids(nint hWnd, HashSet<uint> pids)
+    {
+        if (PidOwned(hWnd, pids)) return true;
+
+        // UWP apps (Windows Settings / SystemSettings.exe) live inside ApplicationFrameHost.exe.
+        // Walk children: CoreWindow may be nested one or two levels down.
+        nint child = 0;
+        while ((child = FindWindowEx(hWnd, child, null, null)) != 0)
+        {
+            if (PidOwned(child, pids)) return true;
+            var core = FindWindowEx(child, 0, "Windows.UI.Core.CoreWindow", null);
+            if (core != 0 && PidOwned(core, pids)) return true;
+        }
+        return false;
+    }
+
+    private static bool PidOwned(nint hWnd, HashSet<uint> pids)
+    {
+        _ = GetWindowThreadProcessId(hWnd, out var pid);
+        return pids.Contains(pid);
     }
 
     public bool ChallengeAndEnforce(AgentApplicationRuleDto rule)
@@ -162,12 +186,11 @@ public sealed class AppLockHost : IAppLockHost
         var pids = GetMatchingSessionPids(processName);
         if (pids.Count == 0) return;
 
-        // 1. Hide every visible window belonging to those PIDs
+        // 1. Hide every visible window belonging to those PIDs (including UWP ApplicationFrameHost wrappers)
         EnumWindows((hWnd, _) =>
         {
             if (!IsWindowVisible(hWnd)) return true;
-            GetWindowThreadProcessId(hWnd, out var pid);
-            if (pids.Contains(pid))
+            if (WindowBelongsToPids(hWnd, pids))
             {
                 ShowWindow(hWnd, SwHide);
                 hiddenHandles.Add(hWnd);

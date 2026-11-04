@@ -28,6 +28,19 @@ public sealed partial class WindowsActivitySource : IActivitySource
 
         var title = ReadTitle(hwnd);
         var name = ProcessImageName(pid) ?? "unknown.exe";
+        if (string.Equals(name, "ApplicationFrameHost.exe", StringComparison.OrdinalIgnoreCase))
+        {
+            var coreChild = FindWindowEx(hwnd, IntPtr.Zero, "Windows.UI.Core.CoreWindow", null);
+            if (coreChild != IntPtr.Zero)
+            {
+                _ = GetWindowThreadProcessId(coreChild, out var childPid);
+                if (childPid != 0 && ProcessImageName(childPid) is { } childName)
+                {
+                    pid = childPid;
+                    name = childName;
+                }
+            }
+        }
         return new ForegroundInfo(name.ToLowerInvariant(), title, (int)pid);
     }
 
@@ -75,6 +88,9 @@ public sealed partial class WindowsActivitySource : IActivitySource
 
     [LibraryImport("user32.dll", SetLastError = true)]
     private static partial uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string? lpszClass, string? lpszWindow);
 
     [LibraryImport("user32.dll", EntryPoint = "GetWindowTextLengthW")]
     private static partial int GetWindowTextLength(IntPtr hWnd);
