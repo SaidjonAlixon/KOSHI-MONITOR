@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Archive, Building2, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Building2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
@@ -194,9 +194,14 @@ export function EmployeesPage() {
     queryFn: ({ signal }) => api<PagedResult<Employee>>('/api/employees', { query: { page, pageSize: 25, search, departmentId, sortBy: sort.by, sortDir: sort.dir }, signal }),
     placeholderData: keepPreviousData,
   })
-  const archive = useMutation({
+  const remove = useMutation({
     mutationFn: (id: string) => api(`/api/employees/${id}`, { method: 'DELETE' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['employees'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['employees'] })
+      qc.invalidateQueries({ queryKey: ['departments'] })
+      qc.invalidateQueries({ queryKey: ['devices'] })
+    },
+    onError: (err) => alert(err instanceof Error ? err.message : 'Xodimni o‘chirib bo‘lmadi'),
   })
 
   return (
@@ -272,8 +277,13 @@ export function EmployeesPage() {
                             <Button variant="ghost" title="Tahrirlash" onClick={() => setEditing(e)}>
                               <Pencil className="size-4" />
                             </Button>
-                            <Button variant="ghost" title="Arxivlash" onClick={() => confirm(`${e.fullName} arxivlansinmi? Qurilmalari biriktirilmagan holatga o‘tadi.`) && archive.mutate(e.id)}>
-                              <Archive className="size-4 text-rose-500" />
+                            <Button
+                              variant="ghost"
+                              title="O‘chirish"
+                              disabled={remove.isPending}
+                              onClick={() => confirm(`${e.fullName} butunlay o‘chirilsinmi? Kompyuterlari o‘chirilmaydi, faqat xodimga biriktirilmagan holatga o‘tadi.`) && remove.mutate(e.id)}
+                            >
+                              <Trash2 className="size-4 text-rose-500" />
                             </Button>
                           </div>
                         </td>

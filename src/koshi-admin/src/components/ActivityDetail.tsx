@@ -177,18 +177,18 @@ export function ActivityDetailView({ query }: { query: ActivityQuery }) {
       </Card>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <Panel title="Kunlik hodisalar jurnali" subtitle="Dastur ochilishi/yopilishi, yoqilish/o‘chish — ichida scroll" height="h-[320px]">
+        <Panel title="Kunlik hodisalar jurnali" subtitle="Dastur ochilishi/yopilishi, yoqilish/o‘chish — ichida scroll" height="h-[560px]">
           <div className="h-full p-3">
             <DeviceEventsFeed deviceId={a.deviceId} initialDate={toLocalInput(new Date(a.from))} fill />
           </div>
         </Panel>
-        <Panel title="Yoqilgan / o‘chgan" subtitle="Har bir ishlash seansi" count={a.powerSessions.length} height="h-[320px]">
+        <Panel title="Yoqilgan / o‘chgan" subtitle="Har bir ishlash seansi" count={a.powerSessions.length} height="h-[560px]">
           <PowerTable rows={a.powerSessions} />
         </Panel>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <Panel title="Ishlatilgan dasturlar" subtitle="Ekranda va fonda" count={a.apps.length} height="h-[280px]">
+        <Panel title="Ishlatilgan dasturlar" subtitle="Ekranda va fonda" count={a.apps.length} height="h-[520px]">
           {a.apps.length === 0 ? (
             <MiniEmpty title="Dastur ma’lumoti yo‘q" />
           ) : (
@@ -214,7 +214,7 @@ export function ActivityDetailView({ query }: { query: ActivityQuery }) {
             </table>
           )}
         </Panel>
-        <Panel title="Brauzer: qidiruv va havolalar" subtitle="Kirilgan sahifa / qidiruv havolasi" count={a.browsing.length} height="h-[280px]">
+        <Panel title="Brauzer: qidiruv va havolalar" subtitle="Kirilgan sahifa / qidiruv havolasi" count={a.browsing.length} height="h-[520px]">
           <BrowsingTable rows={a.browsing} />
         </Panel>
       </div>
@@ -223,7 +223,7 @@ export function ActivityDetailView({ query }: { query: ActivityQuery }) {
         title="Oynalar"
         subtitle="Ekranda yoki fonda ochiq turgan sarlavhalar"
         count={windows.length}
-        height="h-[260px]"
+        height="h-[520px]"
         actions={
           <div className="inline-flex rounded-lg border border-slate-200 p-0.5 text-[11px] dark:border-white/10">
             <button

@@ -89,9 +89,9 @@ public sealed class OrganizationController(OrganizationService org) : Controller
 
     [HttpDelete("employees/{id:guid}")]
     [Authorize(Policy = Permissions.EmployeesManage)]
-    public async Task<IActionResult> ArchiveEmployee(Guid id, CancellationToken ct)
+    public async Task<IActionResult> DeleteEmployee(Guid id, CancellationToken ct)
     {
-        await org.ArchiveEmployeeAsync(id, ct);
+        await org.DeleteEmployeeAsync(id, ct);
         return NoContent();
     }
 

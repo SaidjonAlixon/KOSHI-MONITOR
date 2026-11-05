@@ -130,17 +130,16 @@ public sealed class OrganizationService(IKoshiDbContext db, AuditWriter audit, I
     }
 
     /// <summary>Soft-deletes (archives) the employee; devices stay but are unassigned. History is kept for reports.</summary>
-    public async Task ArchiveEmployeeAsync(Guid id, CancellationToken ct = default)
+    /// <summary>Permanently removes the employee. Their computers stay and become unassigned; the tabel number is freed.</summary>
+    public async Task DeleteEmployeeAsync(Guid id, CancellationToken ct = default)
     {
-        var e = await db.Employees.Include(x => x.Devices).FirstOrDefaultAsync(x => x.Id == id && x.DeletedAt == null, ct) ?? throw Errors.NotFound("Employee");
+        var e = await db.Employees.Include(x => x.Devices).FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw Errors.NotFound("Xodim");
         DataScope.EffectiveDepartment(currentUser, e.DepartmentId);
         var now = Now;
-        e.DeletedAt = now;
-        e.IsActive = false;
-        e.UpdatedAt = now;
         var unassigned = e.Devices.Select(d => d.Id).ToList();
         foreach (var d in e.Devices) { d.EmployeeId = null; d.UpdatedAt = now; }
-        audit.Record("employee.archive", "Employee", id, new { e.EmployeeNumber, unassignedDevices = unassigned });
+        db.Employees.Remove(e);
+        audit.Record("employee.delete", "Employee", id, new { e.FullName, e.EmployeeNumber, unassignedDevices = unassigned });
         await db.SaveChangesAsync(ct);
     }
 
@@ -168,7 +167,7 @@ public sealed class OrganizationService(IKoshiDbContext db, AuditWriter audit, I
     {
         var d = await db.Departments.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw Errors.NotFound("Bo‘lim");
         var active = await db.Employees.CountAsync(e => e.DepartmentId == id && e.DeletedAt == null, ct);
-        if (active > 0) throw Errors.Conflict($"Bu bo‘limda {active} ta xodim bor. Avval ularni boshqa bo‘limga o‘tkazing yoki arxivlang, so‘ng o‘chiring.");
+        if (active > 0) throw Errors.Conflict($"Bu bo‘limda {active} ta xodim bor. Avval ularni boshqa bo‘limga o‘tkazing yoki o‘chiring, so‘ng bo‘limni o‘chiring.");
         // Detach any archived employees so the foreign key stays valid.
         var archived = await db.Employees.Where(e => e.DepartmentId == id).ToListAsync(ct);
         foreach (var e in archived) e.DepartmentId = null;
