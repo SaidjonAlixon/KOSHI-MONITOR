@@ -1,14 +1,14 @@
 import { HubConnectionBuilder, HubConnectionState, LogLevel, type HubConnection } from '@microsoft/signalr'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Eye, Lock, LogOut, Maximize, MessageSquare, MousePointerClick, PackageX, Power, RotateCcw, Square, XCircle, XOctagon } from 'lucide-react'
+import { Activity, AppWindow, ArrowLeft, Clock, Eye, Lock, LogOut, Maximize, MessageSquare, MousePointerClick, PackageX, Power, RotateCcw, Square, XCircle, XOctagon } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode, type WheelEvent } from 'react'
 import { Link, useParams } from 'react-router'
 import { DeviceEventsFeed } from '@/components/DeviceEvents'
 import { PageHeader, Select } from '@/components/forms'
-import { Badge, Button, Card } from '@/components/ui'
+import { Badge, Button, Card, formatDateTime, formatDuration } from '@/components/ui'
 import { api, getAccessToken } from '@/lib/api'
 import { Permissions, useAuth } from '@/lib/auth'
-import type { Device } from '@/lib/types'
+import type { ActivityDetail, Device, LiveDevice } from '@/lib/types'
 
 type Status = 'connecting' | 'ready' | 'starting' | 'live' | 'ended' | 'error'
 
@@ -36,6 +36,132 @@ function ToolGroup({ title, hint, children }: { title: string; hint?: string; ch
   )
 }
 
+function todayRange() {
+  const start = new Date()
+  start.setHours(0, 0, 0, 0)
+  return { from: start.toISOString(), to: new Date(start.getTime() + 86_400_000).toISOString() }
+}
+
+function Stat({ icon, label, value, hint }: { icon: ReactNode; label: string; value: ReactNode; hint?: ReactNode }) {
+  return (
+    <div className="flex min-w-0 items-start gap-2.5 rounded-xl bg-slate-50 px-3 py-2.5 dark:bg-white/[0.04]">
+      <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-white text-brand-600 shadow-sm dark:bg-ink-900 dark:text-brand-300">{icon}</span>
+      <div className="min-w-0">
+        <p className="text-[11px] text-slate-500">{label}</p>
+        <div className="truncate text-sm font-semibold tabular-nums">{value}</div>
+        {hint && <div className="truncate text-[11px] text-slate-400">{hint}</div>}
+      </div>
+    </div>
+  )
+}
+
+/** Live state of the computer and today's summary — shown under the screen, never drawn onto it. */
+function DeviceInsights({ deviceId, device }: { deviceId: string; device: Device | undefined }) {
+  const { can } = useAuth()
+  const live = useQuery({
+    queryKey: ['remote-live', deviceId],
+    queryFn: ({ signal }) => api<LiveDevice[]>('/api/monitoring/live', { query: { deviceId }, signal }),
+    enabled: can(Permissions.MonitoringLive),
+    refetchInterval: 5000,
+  })
+  const range = todayRange()
+  const today = useQuery({
+    queryKey: ['remote-today', deviceId, range.from],
+    queryFn: ({ signal }) => api<ActivityDetail>('/api/monitoring/activity-detail', { query: { deviceId, ...range }, signal }),
+    enabled: can(Permissions.MonitoringRead),
+    refetchInterval: 60_000,
+  })
+
+  const l = live.data?.[0]
+  const t = today.data?.totals
+  const online = l ? l.agentStatus === 'Online' || l.agentStatus === 'Paused' : !!device?.isOnline
+  const idle = l?.currentState === 'Idle'
+  const topApps = (today.data?.apps ?? []).slice(0, 5)
+  const maxSeconds = Math.max(1, ...topApps.map((a) => a.foregroundSeconds))
+
+  return (
+    <Card className="p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold">Kompyuter holati</p>
+          <p className="text-[11px] text-slate-400">Hozirgi faoliyat va bugungi qisqa hisobot — har 5 soniyada yangilanadi</p>
+        </div>
+        <Badge tone={online ? 'green' : 'gray'}>{online ? 'Onlayn' : 'Oflayn'}</Badge>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat
+          icon={<AppWindow className="size-4" />}
+          label="Hozir ochiq dastur"
+          value={l?.currentProcessName ?? '—'}
+          hint={<span title={l?.currentWindowTitle ?? undefined}>{l?.currentWindowTitle ?? 'Oyna nomi yo‘q'}</span>}
+        />
+        <Stat
+          icon={<Activity className="size-4" />}
+          label="Xodim holati"
+          value={!online ? 'Kompyuter oflayn' : idle ? 'Bo‘sh turibdi' : l?.currentState ? 'Ishlayapti' : '—'}
+          hint={l?.activityDurationSeconds != null ? `${formatDuration(l.activityDurationSeconds)} davomida` : undefined}
+        />
+        <Stat
+          icon={<Power className="size-4" />}
+          label="Bugun yoniq"
+          value={formatDuration(t?.onlineSeconds)}
+          hint={l?.connectedAt ? `Oxirgi yoqilish: ${formatDateTime(l.connectedAt)}` : t ? `${t.powerSessionCount} marta yoqilgan` : undefined}
+        />
+        <Stat
+          icon={<Clock className="size-4" />}
+          label="Bugun faol ish"
+          value={formatDuration(t?.activeSeconds)}
+          hint={t ? `Bo‘sh: ${formatDuration(t.idleSeconds)} · ${t.appCount} ta dastur` : undefined}
+        />
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_280px]">
+        <div>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Bugun eng ko‘p ishlatilgan</p>
+          {topApps.length === 0 ? (
+            <p className="py-4 text-xs text-slate-400">{today.isPending ? 'Yuklanmoqda…' : 'Bugun hali dastur ma’lumoti yo‘q'}</p>
+          ) : (
+            <ul className="space-y-2">
+              {topApps.map((a) => (
+                <li key={a.processName} className="text-xs">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="truncate font-mono text-slate-700 dark:text-slate-200">{a.processName}</span>
+                    <span className="shrink-0 tabular-nums text-slate-500">
+                      {formatDuration(a.foregroundSeconds)} · {Math.round(a.share * 100)}%
+                    </span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-white/10">
+                    <div className="h-full rounded-full bg-brand-500" style={{ width: `${Math.max(4, (a.foregroundSeconds / maxSeconds) * 100)}%` }} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Qurilma</p>
+          <dl className="space-y-1.5 text-xs">
+            {[
+              ['Kompyuter nomi', device?.hostname ?? '—'],
+              ['Xodim', device?.employeeName ?? 'biriktirilmagan'],
+              ['Bo‘lim', device?.departmentName ?? '—'],
+              ['Windows', device?.osVersion ?? '—'],
+              ['Agent', device?.agentVersion ? `v${device.agentVersion}` : '—'],
+              ['Oxirgi aloqa', formatDateTime(l?.lastHeartbeatAt ?? device?.lastHeartbeatAt)],
+            ].map(([k, v]) => (
+              <div key={k} className="flex justify-between gap-3">
+                <dt className="text-slate-500">{k}</dt>
+                <dd className="truncate text-right font-medium text-slate-700 dark:text-slate-200" title={v}>{v}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
 export function RemotePage() {
   const { can } = useAuth()
   const { deviceId = '' } = useParams()
@@ -51,6 +177,7 @@ export function RemotePage() {
   const [fps, setFps] = useState(0)
   const [log, setLog] = useState<string[]>([])
   const [controlEnabled, setControlEnabled] = useState(false)
+  const [frameSize, setFrameSize] = useState<{ w: number; h: number } | null>(null)
   const frameCount = useRef(0)
 
   const addLog = useCallback((s: string) => setLog((l) => [`${new Date().toLocaleTimeString('uz-UZ')} — ${s}`, ...l].slice(0, 8)), [])
@@ -74,6 +201,7 @@ export function RemotePage() {
             if (c.width !== w || c.height !== h) {
               c.width = w
               c.height = h
+              setFrameSize({ w, h })
             }
             c.getContext('2d')?.drawImage(bmp, 0, 0)
           }
@@ -334,7 +462,8 @@ export function RemotePage() {
         </div>
       </Card>
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_300px]">
+      <div className="grid items-start gap-4 xl:grid-cols-[1fr_300px]">
+        <div className="min-w-0 space-y-4">
         <div
           className={`relative overflow-hidden rounded-2xl border bg-ink-950 transition ${
             controlEnabled && live ? 'border-brand-500 ring-2 ring-brand-500/40' : 'border-slate-200 dark:border-white/10'
@@ -343,7 +472,8 @@ export function RemotePage() {
           <canvas
             ref={canvasRef}
             tabIndex={0}
-            className={`block aspect-video w-full bg-ink-950 object-contain outline-none focus:ring-2 focus:ring-brand-500 ${controlEnabled ? 'cursor-crosshair' : 'cursor-default'}`}
+            style={{ aspectRatio: frameSize ? `${frameSize.w} / ${frameSize.h}` : '16 / 9' }}
+            className={`block w-full bg-ink-950 outline-none focus:ring-2 focus:ring-brand-500 ${controlEnabled ? 'cursor-crosshair' : 'cursor-default'}`}
             onMouseMove={onMove}
             onMouseDown={(e) => send('down', e, { button: e.button })}
             onMouseUp={(e) => send('up', e, { button: e.button })}
@@ -357,6 +487,8 @@ export function RemotePage() {
               <p className="text-xs text-slate-500">Boshqaruv uchun “Boshqaruvni boshlash”ni tanlang. Klaviatura uchun ekran ustiga bosing. Ctrl+Alt+Del va UAC oynalari Windows himoyasi tufayli uzatilmaydi.</p>
             </div>
           )}
+        </div>
+        <DeviceInsights deviceId={deviceId} device={device.data} />
         </div>
         <div className="space-y-4">
           <Card className="p-4">
