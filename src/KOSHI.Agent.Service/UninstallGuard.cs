@@ -113,7 +113,8 @@ public sealed partial class UninstallGuard(ILogger<UninstallGuard> logger) : Bac
                 if (IsTrustedSetup(p))
                 {
                     setupSeen = true;
-                    UpgradeGate.Enter(TimeSpan.FromMinutes(15));
+                    // Re-entered every tick while setup lives; a short tail is enough for the service restart.
+                    UpgradeGate.Enter(TimeSpan.FromMinutes(2));
                     SelfHeal.BeginUpgrade();
                 }
             }
@@ -558,6 +559,9 @@ internal static class UpgradeGate
         IsUninstalling
         || DateTime.UtcNow.Ticks < Interlocked.Read(ref _untilTicks)
         || Volatile.Read(ref _setupSeen) != 0;
+
+    /// <summary>A KOSHI setup process is alive right now (refreshed every guard tick, no grace period).</summary>
+    public static bool SetupRunning => Volatile.Read(ref _setupSeen) != 0;
 
     public static void Enter(TimeSpan duration)
     {

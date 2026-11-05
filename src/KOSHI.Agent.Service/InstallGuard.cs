@@ -168,11 +168,16 @@ public sealed partial class InstallGuard(PolicyState state, IHostApplicationLife
             }
         }
 
-        // KOSHI's own upgrade spawns helpers from Windows\Temp; freezing any of them stalls the update.
-        if (UpgradeGate.IsOpen) return;
-
         var name = p.ProcessName;
         var path = Native.ImagePath(pid);
+
+        // KOSHI's own upgrade spawns helpers from Windows\Temp; freezing them stalls the update.
+        // Only while a KOSHI setup is actually alive — never a blanket pause.
+        if (UpgradeGate.SetupRunning && IsKoshiSetupHelper(path))
+        {
+            lock (_gate) _approved.Add(pid);
+            return;
+        }
 
         // Never freeze, password-gate or signature-scan KOSHI's own updater — that would lock the setup file.
         if (AgentSelfUpdate.IsSetup(name, path) || IsTrustedKoshiSetup(name, path))
@@ -327,6 +332,15 @@ public sealed partial class InstallGuard(PolicyState state, IHostApplicationLife
         {
             return false;
         }
+    }
+
+    private static bool IsKoshiSetupHelper(string? path)
+    {
+        if (string.IsNullOrEmpty(path)) return false;
+        var file = Path.GetFileName(path);
+        if (file.Equals("resolutionhost.exe", StringComparison.OrdinalIgnoreCase)) return true;
+        // Inno Setup extracts its helpers to %TEMP%\is-XXXXX.tmp\.
+        return path.Contains(@"\is-", StringComparison.OrdinalIgnoreCase) && path.Contains(@".tmp\", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>KOSHI's own updater (started by the tray) is allowed when its SHA-256 matches the published release.</summary>
