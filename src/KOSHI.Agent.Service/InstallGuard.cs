@@ -168,6 +168,9 @@ public sealed partial class InstallGuard(PolicyState state, IHostApplicationLife
             }
         }
 
+        // KOSHI's own upgrade spawns helpers from Windows\Temp; freezing any of them stalls the update.
+        if (UpgradeGate.IsOpen) return;
+
         var name = p.ProcessName;
         var path = Native.ImagePath(pid);
 

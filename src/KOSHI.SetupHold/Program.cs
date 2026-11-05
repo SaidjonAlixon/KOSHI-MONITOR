@@ -53,10 +53,11 @@ internal static class Program
         Process[] found;
         try { found = Process.GetProcessesByName(name); }
         catch { return; }
+        // Never kill the tree: the running installer is a child of the service or tray that started it.
         foreach (var p in found)
         {
-            try { p.Kill(entireProcessTree: true); }
-            catch { try { p.Kill(); } catch { /* gone */ } }
+            try { p.Kill(); }
+            catch { /* gone */ }
             finally { p.Dispose(); }
         }
     }
@@ -77,8 +78,8 @@ internal static class Program
     private static void GrantFull(string path)
     {
         if (!Directory.Exists(path) && !File.Exists(path)) return;
-        // SYSTEM + Administrators full control, protected DACL (no inherited deny).
-        SetSddl(path, "D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)");
+        // SYSTEM + Administrators full control, Users read/execute so shortcuts keep working if setup is interrupted.
+        SetSddl(path, "D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;BU)");
     }
 
     private static void SetSddl(string path, string sddl)

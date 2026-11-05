@@ -253,7 +253,8 @@ begin
   for I := 1 to 80 do
   begin
     NeuterHealer();
-    Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM KOSHI.Agent.exe /T', '', SW_HIDE, ewWaitUntilTerminated, Code);
+    { No /T: this setup is itself a child of the KOSHI service or tray that launched it. }
+    Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM KOSHI.Agent.exe', '', SW_HIDE, ewWaitUntilTerminated, Code);
     Exec(ExpandConstant('{sys}\net.exe'), 'stop {#ServiceName}', '', SW_HIDE, ewWaitUntilTerminated, Code);
     Exec(ExpandConstant('{sys}\sc.exe'), 'stop {#ServiceName}', '', SW_HIDE, ewWaitUntilTerminated, Code);
     { 1060 = service does not exist (fresh install); 1062 = already stopped. }
@@ -264,8 +265,8 @@ begin
 
   { Service (and UninstallGuard) should be gone — now disable healers and drop leftovers. }
   DisableHealerTasks();
-  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM KOSHI.Agent.exe /T', '', SW_HIDE, ewWaitUntilTerminated, Code);
-  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM KOSHI.Agent.Service.exe /T', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM KOSHI.Agent.exe', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM KOSHI.Agent.Service.exe', '', SW_HIDE, ewWaitUntilTerminated, Code);
   NeuterHealer();
   Sleep(800);
   Result := '';
@@ -281,10 +282,13 @@ begin
   if (WizardForm = nil) or (WizardForm.Tag = 1) then exit;
   StopUpgradeHold();
   Svc := ExpandConstant('{autopf}\KOSHI\service\KOSHI.Agent.Service.exe');
+  Exec(ExpandConstant('{sys}\icacls.exe'), '"' + ExpandConstant('{autopf}\KOSHI') + '" /grant *S-1-5-32-545:(OI)(CI)RX /T /C /Q', '', SW_HIDE, ewWaitUntilTerminated, Code);
   if FileExists(Svc) then
   begin
+    Exec(ExpandConstant('{sys}\sc.exe'), 'failure {#ServiceName} reset= 0 actions= restart/1000/restart/1000/restart/1000', '', SW_HIDE, ewWaitUntilTerminated, Code);
     Exec(ExpandConstant('{sys}\sc.exe'), 'start {#ServiceName}', '', SW_HIDE, ewWaitUntilTerminated, Code);
-    Exec(ExpandConstant('{autopf}\KOSHI\agent\KOSHI.Agent.exe'), '', '', SW_HIDE, ewNoWait, Code);
+    if CompareText(GetUserNameString(), 'SYSTEM') <> 0 then
+      Exec(ExpandConstant('{autopf}\KOSHI\agent\KOSHI.Agent.exe'), '', '', SW_HIDE, ewNoWait, Code);
   end;
 end;
 
@@ -314,6 +318,9 @@ procedure StartTray();
 var
   Code: Integer;
 begin
+  { Started by the service as SYSTEM: a tray here would sit invisible in session 0.
+    The service watchdog starts the tray in the user's session instead. }
+  if CompareText(GetUserNameString(), 'SYSTEM') = 0 then exit;
   { Direct CreateProcess — never Explorer or a .lnk. runasoriginaluser uses Explorer
     and shows "Не удается получить доступ к объекту, на который ссылается этот ярлык". }
   Exec(ExpandConstant('{app}\agent\KOSHI.Agent.exe'), '--show', ExpandConstant('{app}\agent'), SW_SHOWNORMAL, ewNoWait, Code);
@@ -356,6 +363,8 @@ begin
   begin
     WizardForm.Tag := 1;
     StopUpgradeHold();
+    { Users need read/execute or the desktop shortcut fails with "access denied". }
+    Exec(ExpandConstant('{sys}\icacls.exe'), '"' + ExpandConstant('{app}') + '" /grant *S-1-5-32-545:(OI)(CI)RX /T /C /Q', '', SW_HIDE, ewWaitUntilTerminated, Code);
     Activate();
     InstallService();
     Exec(ExpandConstant('{app}\service\KOSHI.Agent.Service.exe'), 'heal', '', SW_HIDE, ewWaitUntilTerminated, Code);
