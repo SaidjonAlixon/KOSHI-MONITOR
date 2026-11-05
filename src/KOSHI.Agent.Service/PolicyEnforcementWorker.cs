@@ -50,6 +50,11 @@ public sealed class PolicyEnforcementWorker(ILogger<PolicyEnforcementWorker> log
                 }
                 else
                 {
+                    if (AgentStore.LoadConfig() is null)
+                    {
+                        _webFilter.Apply([], [], false);
+                        _vpn.Tick(false);
+                    }
                     _wifi.Tick();
                 }
             }
@@ -73,7 +78,7 @@ public sealed class PolicyEnforcementWorker(ILogger<PolicyEnforcementWorker> log
             {
                 logger.LogWarning("Device rejected by server: {Reason}", ex.Reason);
                 if (ex.Reason is ServerRejection.Revoked or ServerRejection.Invalid)
-                    AgentStore.TryDelete();
+                    Deactivate();
             }
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !stoppingToken.IsCancellationRequested)
             {
@@ -93,7 +98,7 @@ public sealed class PolicyEnforcementWorker(ILogger<PolicyEnforcementWorker> log
         var credential = AgentStore.LoadCredential();
         if (config is { LicenseExpiresAt: { } exp } && exp <= DateTime.UtcNow)
         {
-            AgentStore.TryDelete();
+            Deactivate();
             return;
         }
         if (config is null || credential is null) return;
@@ -117,6 +122,22 @@ public sealed class PolicyEnforcementWorker(ILogger<PolicyEnforcementWorker> log
             }, ct);
         }
         _lastApplied = key;
+    }
+
+    /// <summary>Enforce + approved with no rules makes AppLocker roll back and IFEO drop every KOSHI block.</summary>
+    private static readonly AgentPolicyDto EmptyPolicy = new(
+        null, null, null, PolicyModeDto.Enforce, true, 3, 300, 30, WindowTitleCaptureDto.None, false, false, false, null, [], "", "");
+
+    /// <summary>Removes the local activation so the tray asks for a new code, and lifts the old policy's restrictions.</summary>
+    private void Deactivate()
+    {
+        if (!AgentStore.TryDelete()) logger.LogWarning("Could not delete local activation files");
+        state.Clear();
+        _lastApplied = null;
+        ApplyIfeoBlocks(EmptyPolicy);
+        try { AppLockerAdapter.Apply(EmptyPolicy); }
+        catch (Exception ex) { logger.LogDebug(ex, "AppLocker reset failed"); }
+        logger.LogWarning("Device deactivated: activation removed, restrictions lifted");
     }
 
     private async Task ShellLoop(CancellationToken ct)

@@ -33,6 +33,15 @@ public sealed class PolicyState
         }
     }
 
+    /// <summary>Device deleted or license expired: forget the policy so its restrictions are lifted.</summary>
+    public void Clear()
+    {
+        Volatile.Write(ref _current, null);
+        try { File.Delete(CachePath); }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+
     public void LoadCache()
     {
         if (Current is not null || !File.Exists(CachePath)) return;

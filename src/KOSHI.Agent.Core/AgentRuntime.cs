@@ -86,6 +86,8 @@ public sealed class AgentRuntime : IAsyncDisposable
     private RemoteConnection? _remote;
     private AgentPolicyDto? _policy;
     private AgentConfig? _config;
+    private string? _rejectedCredential;
+    private TaskCompletionSource? _rejection;
     private bool _monitoringAllowed = true;
     private DateOnly _today;
 
@@ -181,6 +183,12 @@ public sealed class AgentRuntime : IAsyncDisposable
         {
             _config = AgentStore.LoadConfig();
             var credential = AgentStore.LoadCredential();
+            // The tray may lack rights to delete ProgramData files; the service removes them shortly after.
+            if (credential is not null && credential == _rejectedCredential)
+            {
+                _config = null;
+                credential = null;
+            }
             if (_config is { LicenseExpiresAt: { } localExp } && localExp <= DateTime.UtcNow)
             {
                 AgentStore.TryDelete();
@@ -248,26 +256,51 @@ public sealed class AgentRuntime : IAsyncDisposable
             _remote.ChatTypingReceived += name => AdminTyping?.Invoke(name);
             _ = _remote.StartAsync(ct);
 
+            // One loop being rejected (device deleted, license expired) must stop all of them.
+            using var session = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            var rejection = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _rejection = rejection;
+            Task[] loops = [SampleLoop(session.Token), EnforceRulesLoop(session.Token), SyncLoop(session.Token), HeartbeatLoop(session.Token), LocationLoop(session.Token)];
             try
             {
-                await Task.WhenAll(SampleLoop(ct), EnforceRulesLoop(ct), SyncLoop(ct), HeartbeatLoop(ct), LocationLoop(ct));
+                var first = await Task.WhenAny([.. loops, rejection.Task]);
+                await session.CancelAsync();
+                await first;
             }
             catch (DeviceRejectedException ex)
             {
                 _logger.LogWarning("Server rejected device: {Reason}", ex.Reason);
                 if (ex.Reason is ServerRejection.Revoked or ServerRejection.Invalid)
                 {
+                    _rejectedCredential = credential;
                     AgentStore.TryDelete();
                     _config = null;
-                    SetStatus(s => s with { State = AgentState.NotActivated, MonitoringActive = false, LicenseExpiresAt = null });
-                    await _remote.DisposeAsync();
-                    _remote = null;
-                    await Task.Delay(TimeSpan.FromSeconds(3), ct);
+                    _policy = null;
+                    lock (_gate) _unlockedApps.Clear();
+                    SetStatus(s => s with { State = AgentState.NotActivated, MonitoringActive = false, LicenseExpiresAt = null, DeviceName = null });
                 }
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
                 break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Agent session stopped; reconnecting");
+            }
+            _rejection = null;
+            await session.CancelAsync();
+            try { await Task.WhenAll(loops); }
+            catch { /* loops end with cancellation or the rejection handled above */ }
+            if (_remote is not null)
+            {
+                try { await _remote.DisposeAsync(); } catch { /* best-effort */ }
+                _remote = null;
+            }
+            if (!ct.IsCancellationRequested)
+            {
+                try { await Task.Delay(TimeSpan.FromSeconds(3), ct); }
+                catch (OperationCanceledException) { break; }
             }
         }
     }
@@ -665,7 +698,19 @@ public sealed class AgentRuntime : IAsyncDisposable
         }
     }
 
-    public Task RefreshPolicyNowAsync() => _api is null ? Task.CompletedTask : RefreshPolicyAsync(CancellationToken.None);
+    /// <summary>Server "refresh-policy" push. A deleted device is rejected here, so the session ends at once.</summary>
+    public async Task RefreshPolicyNowAsync()
+    {
+        if (_api is null) return;
+        try
+        {
+            await RefreshPolicyAsync(CancellationToken.None);
+        }
+        catch (DeviceRejectedException ex) when (ex.Reason is ServerRejection.Revoked or ServerRejection.Invalid)
+        {
+            _rejection?.TrySetException(ex);
+        }
+    }
 
     private async Task RefreshPolicyAsync(CancellationToken ct)
     {
