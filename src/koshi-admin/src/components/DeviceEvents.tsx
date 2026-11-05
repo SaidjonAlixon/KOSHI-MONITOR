@@ -191,7 +191,7 @@ export function DeviceEventsFeed({
       </div>
       <div
         className={`overflow-y-auto overscroll-contain pr-1 ${
-          fill ? 'min-h-0 flex-1' : compact ? 'max-h-52' : 'max-h-64'
+          fill ? 'min-h-0 flex-1' : compact ? 'max-h-[560px]' : 'max-h-[600px]'
         }`}
       >
         {timeline.isPending ? (
