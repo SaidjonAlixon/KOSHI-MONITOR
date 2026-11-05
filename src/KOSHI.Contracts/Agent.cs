@@ -28,7 +28,7 @@ public sealed class DeviceActivationRequest
 }
 
 /// <summary>The credential is returned exactly once; the agent must store it protected (DPAPI).</summary>
-public sealed record DeviceActivationResponse(Guid DeviceId, string DeviceCredential, string DisplayName);
+public sealed record DeviceActivationResponse(Guid DeviceId, string DeviceCredential, string DisplayName, DateTime? LicenseExpiresAt = null);
 
 public sealed class HeartbeatRequest
 {
@@ -61,7 +61,8 @@ public sealed record HeartbeatResponse(
     DateTime ServerTime,
     bool MonitoringAllowed,
     Guid? PolicyId,
-    int? PolicyVersion);
+    int? PolicyVersion,
+    DateTime? LicenseExpiresAt = null);
 
 public sealed class TelemetryBatchRequest
 {

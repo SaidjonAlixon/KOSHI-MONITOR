@@ -324,6 +324,45 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
                     b.ToTable("AuditLogs");
                 });
 
+            modelBuilder.Entity("KOSHI.Domain.BlockedSite", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Domain")
+                        .IsRequired()
+                        .HasMaxLength(253)
+                        .HasColumnType("character varying(253)");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Domain")
+                        .IsUnique();
+
+                    b.ToTable("BlockedSites");
+                });
+
             modelBuilder.Entity("KOSHI.Domain.Department", b =>
                 {
                     b.Property<Guid>("Id")
@@ -417,7 +456,13 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
+                    b.Property<bool?>("InstallBlocked")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime?>("LastHeartbeatAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LicenseExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<bool>("MonitoringEnabled")
@@ -427,6 +472,9 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
+                    b.Property<bool?>("ProtectionEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime?>("RevokedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -435,6 +483,9 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool?>("VpnBlocked")
+                        .HasColumnType("boolean");
 
                     b.HasKey("Id");
 
@@ -472,6 +523,9 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime?>("InvalidatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("LicenseDays")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime?>("UsedAt")
                         .HasColumnType("timestamp with time zone");
@@ -641,86 +695,6 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
                     b.HasIndex("DeviceId", "LastSeenAt");
 
                     b.ToTable("DeviceLocations");
-                });
-
-            modelBuilder.Entity("KOSHI.Domain.BlockedSite", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Category")
-                        .HasMaxLength(60)
-                        .HasColumnType("character varying(60)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Domain")
-                        .IsRequired()
-                        .HasMaxLength(253)
-                        .HasColumnType("character varying(253)");
-
-                    b.Property<bool>("IsEnabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Note")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Domain")
-                        .IsUnique();
-
-                    b.ToTable("BlockedSites");
-                });
-
-            modelBuilder.Entity("KOSHI.Domain.SiteAllowance", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("BlockedSiteId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("CreatedByEmail")
-                        .HasMaxLength(254)
-                        .HasColumnType("character varying(254)");
-
-                    b.Property<Guid?>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("DeviceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Reason")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("DeviceId");
-
-                    b.HasIndex("BlockedSiteId", "ExpiresAt");
-
-                    b.ToTable("SiteAllowances");
                 });
 
             modelBuilder.Entity("KOSHI.Domain.Employee", b =>
@@ -1112,6 +1086,47 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("KOSHI.Domain.SiteAllowance", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BlockedSiteId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByEmail")
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("DeviceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeviceId");
+
+                    b.HasIndex("BlockedSiteId", "ExpiresAt");
+
+                    b.ToTable("SiteAllowances");
+                });
+
             modelBuilder.Entity("KOSHI.Domain.SupportMessage", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1228,6 +1243,10 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<string>("PasswordSecret")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -1419,29 +1438,6 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
                     b.Navigation("Device");
                 });
 
-            modelBuilder.Entity("KOSHI.Domain.SiteAllowance", b =>
-                {
-                    b.HasOne("KOSHI.Domain.BlockedSite", "BlockedSite")
-                        .WithMany("Allowances")
-                        .HasForeignKey("BlockedSiteId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("KOSHI.Domain.Device", "Device")
-                        .WithMany()
-                        .HasForeignKey("DeviceId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
-                    b.Navigation("BlockedSite");
-
-                    b.Navigation("Device");
-                });
-
-            modelBuilder.Entity("KOSHI.Domain.BlockedSite", b =>
-                {
-                    b.Navigation("Allowances");
-                });
-
             modelBuilder.Entity("KOSHI.Domain.Employee", b =>
                 {
                     b.HasOne("KOSHI.Domain.Department", "Department")
@@ -1535,6 +1531,24 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("KOSHI.Domain.SiteAllowance", b =>
+                {
+                    b.HasOne("KOSHI.Domain.BlockedSite", "BlockedSite")
+                        .WithMany("Allowances")
+                        .HasForeignKey("BlockedSiteId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("KOSHI.Domain.Device", "Device")
+                        .WithMany()
+                        .HasForeignKey("DeviceId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("BlockedSite");
+
+                    b.Navigation("Device");
+                });
+
             modelBuilder.Entity("KOSHI.Domain.SupportMessage", b =>
                 {
                     b.HasOne("KOSHI.Domain.Device", "Device")
@@ -1573,6 +1587,11 @@ namespace KOSHI.Infrastructure.Persistence.Migrations
                     b.Navigation("Role");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("KOSHI.Domain.BlockedSite", b =>
+                {
+                    b.Navigation("Allowances");
                 });
 
             modelBuilder.Entity("KOSHI.Domain.Department", b =>

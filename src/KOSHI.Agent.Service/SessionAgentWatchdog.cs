@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using KOSHI.Agent.Core;
 
 namespace KOSHI.Agent.Service;
 
@@ -23,17 +24,30 @@ public sealed class SessionAgentWatchdog(ILogger<SessionAgentWatchdog> logger) :
             return;
         }
 
+        try { EnsureRunning(exe); } catch { /* first tick is best-effort */ }
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                EnsureRunning(exe);
+                SelfHeal.ClearHijacks();
+                var setupRunning = false;
+                foreach (var p in Process.GetProcesses())
+                {
+                    try
+                    {
+                        if (AgentSelfUpdate.IsSetupProcess(p.ProcessName)) { setupRunning = true; break; }
+                    }
+                    catch { /* gone */ }
+                    finally { p.Dispose(); }
+                }
+                if (!setupRunning)
+                    EnsureRunning(exe);
             }
             catch (Exception ex)
             {
                 logger.LogDebug(ex, "Watchdog tick failed");
             }
-            await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+            await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
         }
     }
 

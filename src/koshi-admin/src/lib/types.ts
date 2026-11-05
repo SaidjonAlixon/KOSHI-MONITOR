@@ -20,6 +20,63 @@ export interface ApplicationUsage {
   share: number
 }
 
+export interface ActivityTotals {
+  activeSeconds: number
+  idleSeconds: number
+  onlineSeconds: number
+  firstActivityAt: string | null
+  lastActivityAt: string | null
+  powerSessionCount: number
+  appCount: number
+  browsingCount: number
+}
+
+export interface PowerSession {
+  onAt: string
+  offAt: string | null
+  durationSeconds: number | null
+  ongoing: boolean
+}
+
+export interface WindowUsage {
+  processName: string
+  windowTitle: string | null
+  seconds: number
+  count: number
+  firstAt: string
+  lastAt: string
+}
+
+export interface BrowsingItem {
+  browser: string
+  title: string
+  site: string | null
+  query: string | null
+  kind: string
+  seconds: number
+  visits: number
+  firstAt: string
+  lastAt: string
+  url?: string | null
+}
+
+export interface ActivityDetail {
+  deviceId: string
+  deviceName: string
+  hostname: string | null
+  employeeName: string | null
+  departmentName: string | null
+  from: string
+  to: string
+  timeZone: string
+  totals: ActivityTotals
+  powerSessions: PowerSession[]
+  apps: ApplicationUsage[]
+  foregroundWindows: WindowUsage[]
+  backgroundWindows: WindowUsage[]
+  browsing: BrowsingItem[]
+}
+
 export interface DepartmentKpi {
   departmentId: string | null
   departmentName: string
@@ -67,12 +124,19 @@ export interface Device {
   createdAt: string
   activatedAt: string | null
   blockReason: string | null
+  protectionEnabled: boolean | null
+  protectionPasswordSet: boolean
+  licenseExpiresAt: string | null
+  activationExpiresAt: string | null
+  vpnBlocked: boolean | null
+  installBlocked: boolean | null
 }
 
 export interface ActivationCode {
   deviceId: string
   activationCode: string
   expiresAt: string
+  licenseDays: number | null
 }
 
 export interface LiveDevice {
@@ -208,6 +272,9 @@ export interface PolicyAssignment {
   scope: AssignmentScope
   departmentId: string | null
   deviceId: string | null
+  departmentName?: string | null
+  deviceName?: string | null
+  employeeName?: string | null
 }
 
 export interface Policy {
@@ -318,6 +385,7 @@ export interface AdminUser {
   departmentScopeId: string | null
   lastLoginAt: string | null
   createdAt: string
+  password?: string | null
 }
 
 export interface Role {

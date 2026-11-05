@@ -56,12 +56,7 @@ public static class Permissions
         new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
         {
             [RoleNames.SuperAdmin] = All,
-            [RoleNames.ITAdmin] =
-            [
-                DashboardRead, DevicesRead, DevicesManage, MonitoringRead, MonitoringLive, PoliciesRead,
-                PoliciesManage, ReportsRead, ReportsIndividual, ReportsExport, EmployeesRead, AuditRead,
-                AlertsRead, AlertsManage, SettingsRead, SupportChat, RemoteControl, LocationRead, DataUnscoped,
-            ],
+            [RoleNames.ITAdmin] = All.Where(p => p != RolesManage).ToList(),
             [RoleNames.HRManager] =
             [
                 DashboardRead, ReportsRead, ReportsIndividual, ReportsExport, EmployeesRead, EmployeesManage, SupportChat,

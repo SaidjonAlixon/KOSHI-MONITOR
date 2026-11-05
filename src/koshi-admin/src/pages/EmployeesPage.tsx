@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Archive, Building2, Pencil, Plus } from 'lucide-react'
+import { Archive, Building2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
@@ -119,18 +119,40 @@ function Departments({ manage }: { manage: boolean }) {
       qc.invalidateQueries({ queryKey: ['departments'] })
     },
   })
+  const remove = useMutation({
+    mutationFn: (id: string) => api(`/api/departments/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['departments'] }),
+    onError: (e) => alert((e as Error).message),
+  })
   return (
     <Card>
       <CardHeader title="Bo‘limlar va filiallar" subtitle={`${deps.data?.length ?? 0} ta bo‘lim`} />
       <ul className="divide-y divide-slate-100 dark:divide-white/5">
         {(deps.data ?? []).map((d) => (
-          <li key={d.id} className="flex items-center justify-between px-5 py-3 text-sm">
-            <span className="flex items-center gap-2">
-              <Building2 className="size-4 text-slate-400" /> {d.name}
+          <li key={d.id} className="flex items-center justify-between gap-2 px-5 py-3 text-sm">
+            <span className="flex min-w-0 items-center gap-2">
+              <Building2 className="size-4 shrink-0 text-slate-400" /> <span className="truncate">{d.name}</span>
               {d.isDemo && <Badge tone="amber">DEMO</Badge>}
             </span>
-            <span className="text-xs text-slate-500">
-              {d.branch ?? '—'} · {d.employeeCount} xodim
+            <span className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">
+                {d.branch ?? '—'} · {d.employeeCount} xodim
+              </span>
+              {manage && (
+                <button
+                  className="shrink-0 rounded-lg p-1 text-slate-400 hover:text-rose-600"
+                  title={`${d.name} bo‘limini o‘chirish`}
+                  onClick={() => {
+                    if (d.employeeCount > 0) {
+                      alert(`“${d.name}” bo‘limida ${d.employeeCount} ta xodim bor. Avval ularni boshqa bo‘limga o‘tkazing, so‘ng o‘chiring.`)
+                      return
+                    }
+                    if (confirm(`“${d.name}” bo‘limi o‘chirilsinmi?`)) remove.mutate(d.id)
+                  }}
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              )}
             </span>
           </li>
         ))}

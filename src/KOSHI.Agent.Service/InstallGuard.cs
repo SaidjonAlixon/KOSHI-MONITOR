@@ -19,7 +19,7 @@ namespace KOSHI.Agent.Service;
 /// in 3 minutes kills that installer. Uninstallers and updates of already installed programs (Program Files) are not affected.
 /// </summary>
 [SupportedOSPlatform("windows")]
-public sealed partial class InstallGuard(PolicyState state, ILogger<InstallGuard> logger) : BackgroundService
+public sealed partial class InstallGuard(PolicyState state, IHostApplicationLifetime lifetime, ILogger<InstallGuard> logger) : BackgroundService
 {
     private static readonly TimeSpan PendingTimeout = TimeSpan.FromMinutes(3);
     private const int MaxAttempts = 3;
@@ -27,18 +27,23 @@ public sealed partial class InstallGuard(PolicyState state, ILogger<InstallGuard
     private static readonly HashSet<string> InstallerHosts = new(StringComparer.OrdinalIgnoreCase)
     {
         "msiexec", "winget", "appinstaller", "appinstallercli", "winstore.app", "microsoft.desktopappinstaller",
+        "desktopappinstaller", "storeexperiencehost", "wsreset", "installmanagerapp", "windowspackageinstaller",
+        "msixmgr", "appxdeploymentclient",
     };
-    private static readonly string[] NameKeywords = ["setup", "instal"];
+    private static readonly string[] NameKeywords =
+        ["setup", "instal", "stub", "nsis", "inno", "tsetup", "bootstrap", "unpack", "sfx"];
     private static readonly string[] MetaMarks =
     [
         "setup", "installer", "install ", "inno setup", "nullsoft", "nsis", "installshield", "wix toolset", "advanced installer",
         "installaware", "setup factory", "wise installation", "install4j", "smart install maker", "actual installer", "installforge",
+        "squirrel", "clickonce", "bootstrapper", "web installer", "offline installer", "msix", "appx bundle",
     ];
     private static readonly byte[][] BinaryMarks =
     [
         Encoding.ASCII.GetBytes("Inno Setup"), Encoding.ASCII.GetBytes("Nullsoft.NSIS"), Encoding.ASCII.GetBytes("NullsoftInst"),
         Encoding.ASCII.GetBytes("InstallShield"), Encoding.ASCII.GetBytes(".wixburn"), Encoding.ASCII.GetBytes("WixBundle"),
         Encoding.ASCII.GetBytes("Advanced Installer"), Encoding.ASCII.GetBytes("InstallAware"), Encoding.ASCII.GetBytes("install4j"),
+        Encoding.ASCII.GetBytes("Squirrel"), Encoding.ASCII.GetBytes("!SFX!"), Encoding.ASCII.GetBytes("7-Zip"),
     ];
 
     private readonly Lock _gate = new();
@@ -86,7 +91,7 @@ public sealed partial class InstallGuard(PolicyState state, ILogger<InstallGuard
             {
                 logger.LogDebug(ex, "Install guard scan failed");
             }
-            await Task.Delay(250, ct);
+            await Task.Delay(50, ct);
         }
     }
 
@@ -102,20 +107,27 @@ public sealed partial class InstallGuard(PolicyState state, ILogger<InstallGuard
                 try
                 {
                     session = p.SessionId;
-                    if (session == 0) continue;
                     started = p.StartTime;
                 }
                 catch
                 {
                     continue;
                 }
+                if (session == 0 && !IsUserFacingSessionZero(p))
+                    continue;
+
                 alive.Add(p.Id);
                 lock (_gate)
                 {
                     if (_seen.TryGetValue(p.Id, out var known) && known == started) continue;
                     _seen[p.Id] = started;
                 }
-                if (!_firstScan) Evaluate(p, session);
+                if (!_firstScan)
+                {
+                    var console = Native.ActiveSession();
+                    var promptSession = session == 0 && console > 0 ? console : session;
+                    Evaluate(p, promptSession);
+                }
             }
             finally
             {
@@ -159,11 +171,12 @@ public sealed partial class InstallGuard(PolicyState state, ILogger<InstallGuard
         var name = p.ProcessName;
         var path = Native.ImagePath(pid);
 
-        // Never freeze or password-gate KOSHI's own updater — that would break version upgrades.
-        if (AgentSelfUpdate.IsSetupProcess(name) || IsTrustedKoshiSetup(name, path))
+        // Never freeze, password-gate or signature-scan KOSHI's own updater — that would lock the setup file.
+        if (AgentSelfUpdate.IsSetup(name, path) || IsTrustedKoshiSetup(name, path))
         {
             lock (_gate) _approved.Add(pid);
             UpgradeGate.Enter(TimeSpan.FromMinutes(15));
+            SelfHeal.BeginUpgrade();
             return;
         }
 
@@ -179,24 +192,96 @@ public sealed partial class InstallGuard(PolicyState state, ILogger<InstallGuard
         logger.LogInformation("Installer {Name} ({Path}) frozen in session {Session}; waiting for password", name, path, session);
     }
 
+    /// <summary>
+    /// Session-0 msiexec is used by Windows Update. Only intercept it when the package lives in a user folder/temp.
+    /// </summary>
+    private static bool IsUserFacingSessionZero(Process p)
+    {
+        var name = p.ProcessName.ToLowerInvariant();
+        if (!InstallerHosts.Contains(name) && !NameKeywords.Any(name.Contains))
+            return false;
+        var blob = (UninstallGuard.ReadCommandLine(p.Id) ?? "") + " " + (Native.ImagePath(p.Id) ?? "");
+        return blob.Contains(@"\Users\", StringComparison.OrdinalIgnoreCase)
+            || blob.Contains(@"\Temp\", StringComparison.OrdinalIgnoreCase)
+            || blob.Contains(@"\Downloads\", StringComparison.OrdinalIgnoreCase);
+    }
+
     private bool IsInstaller(string processName, string? path, out string? description)
     {
         description = null;
         var name = processName.ToLowerInvariant();
+        if (AgentSelfUpdate.IsSetup(processName, path))
+            return false;
         if (name.StartsWith("unins", StringComparison.Ordinal) || name.Contains("uninst", StringComparison.Ordinal)) return false;
         if (InstallerHosts.Contains(name)) return true;
-        if (path is null || IsUnderTrustedDirectory(path)) return false;
+        if (NameKeywords.Any(name.Contains)) return true;
+        if (path is null) return false;
+        if (IsHotDropPath(path)) return true;
+        if (IsUnderTrustedDirectory(path)) return false;
 
         FileVersionInfo? vi = null;
         try { vi = FileVersionInfo.GetVersionInfo(path); }
         catch (FileNotFoundException) { }
         description = vi?.FileDescription is { Length: > 0 } d ? d : vi?.ProductName;
 
-        if (NameKeywords.Any(name.Contains)) return true;
         var meta = vi is null ? string.Empty
             : string.Join(' ', vi.FileDescription, vi.ProductName, vi.InternalName, vi.OriginalFilename, vi.Comments, vi.CompanyName).ToLowerInvariant();
         if (MetaMarks.Any(meta.Contains)) return true;
+        var ext = Path.GetExtension(path);
+        if (ext.Equals(".msi", StringComparison.OrdinalIgnoreCase)
+            || ext.Equals(".msix", StringComparison.OrdinalIgnoreCase)
+            || ext.Equals(".appx", StringComparison.OrdinalIgnoreCase)
+            || ext.Equals(".appxbundle", StringComparison.OrdinalIgnoreCase)
+            || ext.Equals(".msixbundle", StringComparison.OrdinalIgnoreCase))
+            return true;
         return HasInstallerSignature(path);
+    }
+
+    /// <summary>
+    /// Typical "I just downloaded this" locations. The service runs as SYSTEM so we match
+    /// every user's Downloads/Desktop/Temp rather than Environment.SpecialFolder.
+    /// </summary>
+    private static bool IsHotDropPath(string path)
+    {
+        try
+        {
+            var full = Path.GetFullPath(path);
+            if (full.StartsWith(Path.GetTempPath().TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase))
+                return true;
+            var winTemp = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp");
+            if (full.StartsWith(winTemp.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            var users = Path.Combine(Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows)) ?? @"C:\", "Users");
+            if (full.StartsWith(users.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase))
+            {
+                var rel = full[(users.TrimEnd('\\').Length + 1)..];
+                var slash = rel.IndexOf('\\');
+                if (slash > 0)
+                {
+                    var rest = rel[(slash + 1)..];
+                    if (rest.StartsWith("Downloads\\", StringComparison.OrdinalIgnoreCase)
+                        || rest.StartsWith("Desktop\\", StringComparison.OrdinalIgnoreCase)
+                        || rest.StartsWith("Documents\\", StringComparison.OrdinalIgnoreCase)
+                        || rest.StartsWith(@"AppData\Local\Temp\", StringComparison.OrdinalIgnoreCase)
+                        || rest.StartsWith(@"AppData\Local\Microsoft\Windows\INetCache\", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+
+            var root = Path.GetPathRoot(full);
+            if (!string.IsNullOrEmpty(root))
+            {
+                var drive = new DriveInfo(root);
+                if (drive.DriveType is DriveType.Removable or DriveType.CDRom or DriveType.Ram)
+                    return true;
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or IOException or UnauthorizedAccessException)
+        {
+            return true;
+        }
+        return false;
     }
 
     private static bool IsUnderTrustedDirectory(string path)
@@ -214,6 +299,8 @@ public sealed partial class InstallGuard(PolicyState state, ILogger<InstallGuard
     /// <summary>Looks for installer-builder markers in the first 4 MB of the executable. Cached per file version.</summary>
     private bool HasInstallerSignature(string path)
     {
+        if (AgentSelfUpdate.IsSetupPath(path))
+            return false;
         try
         {
             var fi = new FileInfo(path);
@@ -242,12 +329,12 @@ public sealed partial class InstallGuard(PolicyState state, ILogger<InstallGuard
     /// <summary>KOSHI's own updater (started by the tray) is allowed when its SHA-256 matches the published release.</summary>
     private bool IsTrustedKoshiSetup(string name, string? path)
     {
-        if (AgentSelfUpdate.IsSetupProcess(name)) return true;
+        if (AgentSelfUpdate.IsSetup(name, path)) return true;
         if (path is null) return false;
         try
         {
             var file = Path.GetFileName(path);
-            if (file.StartsWith(AgentSelfUpdate.SetupPrefix, StringComparison.OrdinalIgnoreCase)) return true;
+            if (AgentSelfUpdate.IsSetupPath(path) || file.StartsWith(AgentSelfUpdate.SetupPrefix, StringComparison.OrdinalIgnoreCase)) return true;
             var vi = FileVersionInfo.GetVersionInfo(path);
             var meta = string.Join(' ', vi.ProductName, vi.FileDescription, vi.OriginalFilename, vi.CompanyName);
             return meta.Contains("KOSHI", StringComparison.OrdinalIgnoreCase)
@@ -372,7 +459,15 @@ public sealed partial class InstallGuard(PolicyState state, ILogger<InstallGuard
                 return new GateResponse { Ok = true };
             case GatePipe.OpPrepareUpgrade:
                 UpgradeGate.Enter(TimeSpan.FromMinutes(15));
+                SelfHeal.BeginUpgrade();
                 return new GateResponse { Ok = true };
+            case GatePipe.OpRunSetup:
+                return StartTrustedSetup(r.Path);
+            case GatePipe.OpUninstall:
+                if (!SelfUninstall.Begin(lifetime))
+                    return new GateResponse { Ok = true, Message = "O‘chirish allaqachon boshlangan" };
+                logger.LogWarning("Remote uninstall started by administrator");
+                return new GateResponse { Ok = true, Message = "KOSHI bu kompyuterdan o‘chirilmoqda" };
             case GatePipe.OpPending:
                 lock (_gate)
                 {
@@ -397,6 +492,39 @@ public sealed partial class InstallGuard(PolicyState state, ILogger<InstallGuard
                 return new GateResponse { Ok = true, Closed = true };
             default:
                 return new GateResponse { Ok = false, Message = "Noma’lum so‘rov" };
+        }
+    }
+
+    private GateResponse StartTrustedSetup(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            return new GateResponse { Ok = false, Message = "O‘rnatuvchi topilmadi" };
+        string full;
+        try { full = Path.GetFullPath(path); }
+        catch (Exception) { return new GateResponse { Ok = false, Message = "Noto‘g‘ri yo‘l" }; }
+        if (!AgentSelfUpdate.IsSetupPath(full))
+            return new GateResponse { Ok = false, Message = "Noto‘g‘ri o‘rnatuvchi" };
+        var roots = new[]
+        {
+            Path.GetFullPath(Path.GetTempPath()),
+            Path.GetFullPath(AgentPaths.MachineDir),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp"),
+        };
+        if (!roots.Any(r => full.StartsWith(r.TrimEnd('\\') + "\\", StringComparison.OrdinalIgnoreCase)))
+            return new GateResponse { Ok = false, Message = "Noto‘g‘ri yo‘l" };
+
+        UpgradeGate.Enter(TimeSpan.FromMinutes(15));
+        SelfHeal.BeginUpgrade();
+        try
+        {
+            AgentSelfUpdate.Launch(full, alreadyElevated: true);
+            logger.LogInformation("Trusted KOSHI setup started as SYSTEM: {Path}", full);
+            return new GateResponse { Ok = true, Message = "Yangilanish o‘rnatilmoqda" };
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Trusted setup launch failed");
+            return new GateResponse { Ok = false, Message = ex.Message };
         }
     }
 
@@ -507,6 +635,15 @@ public sealed partial class InstallGuard(PolicyState state, ILogger<InstallGuard
 
         public static int? ClientSession(NamedPipeServerStream pipe) =>
             GetNamedPipeClientSessionId(pipe.SafePipeHandle.DangerousGetHandle(), out var session) ? (int)session : null;
+
+        [LibraryImport("kernel32.dll")]
+        private static partial uint WTSGetActiveConsoleSessionId();
+
+        public static int ActiveSession()
+        {
+            var id = WTSGetActiveConsoleSessionId();
+            return id is 0 or 0xFFFFFFFF ? 0 : (int)id;
+        }
 
         private static void WithHandle(int pid, uint access, Func<nint, int> action)
         {

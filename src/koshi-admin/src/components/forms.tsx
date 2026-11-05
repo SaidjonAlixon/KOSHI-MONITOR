@@ -180,7 +180,7 @@ export function FilterBar({ value, onChange, show = ['date', 'department', 'bran
   const set = (patch: Partial<Filters>) => onChange({ ...value, ...patch })
 
   return (
-    <div className="grid gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 sm:grid-cols-2 lg:grid-cols-6 dark:border-white/10 dark:bg-ink-900">
+    <div className="grid gap-2.5 rounded-2xl border border-slate-200/80 bg-white p-3 sm:grid-cols-2 lg:grid-cols-6 dark:border-white/10 dark:bg-ink-900">
       {show.includes('date') && (
         <>
           <Field label="Dan">

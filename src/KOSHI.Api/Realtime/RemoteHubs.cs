@@ -97,7 +97,7 @@ public sealed class AgentHub(RemoteRegistry registry, IHubContext<RemoteHub> adm
         await admins.Clients.Client(s.AdminConnectionId).SendAsync("frame", sessionId, jpeg, width, height);
     }
 
-    /// <summary>The employee (or the agent) ended the session; the banner was visible the whole time.</summary>
+    /// <summary>The agent ended the session (disconnect, replace, or process stop).</summary>
     public async Task SessionEnded(Guid sessionId, string reason)
     {
         var s = registry.Get(sessionId);

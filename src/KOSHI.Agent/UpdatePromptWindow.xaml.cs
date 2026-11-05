@@ -27,7 +27,7 @@ public partial class UpdatePromptWindow : Window
         var progress = new Progress<int>(pct =>
         {
             DownloadBar.Value = pct;
-            StatusLabel.Text = pct < 100 ? $"Yangilanish yuklanmoqda… {pct}%" : "O‘rnatilmoqda… Dastur hozir qayta ishga tushadi.";
+            StatusLabel.Text = pct < 100 ? $"Yangilanish yuklanmoqda… {pct}%" : "O‘rnatilmoqda… Dastur o‘zi qayta ishga tushadi.";
         });
 
         var (ok, msg) = await _runtime.InstallUpdateAsync(_info, progress);
@@ -41,8 +41,7 @@ public partial class UpdatePromptWindow : Window
         }
 
         StatusLabel.Text = msg;
-        await Task.Delay(1200);
-        Close();
+        await Task.Delay(2500);
     }
 
     private void OnLater(object sender, RoutedEventArgs e) => Close();

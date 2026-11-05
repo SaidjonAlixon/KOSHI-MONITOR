@@ -10,7 +10,7 @@ namespace KOSHI.Agent.Service;
 /// <summary>
 /// Stops every practical uninstall path: service stop/delete, taskkill of the service,
 /// deleting Program Files\KOSHI, sc.exe/PowerShell/CMD targeting KOSHI, msiexec uninstall.
-/// Official KOSHI-Agent-Setup.exe (auto-update or reinstall) is allowed through UpgradeGate.
+/// Official KOSHI-Agent-Setup.exe may replace files (upgrade) while it is running; uninstallers are always blocked.
 /// </summary>
 [SupportedOSPlatform("windows")]
 public sealed partial class UninstallGuard(ILogger<UninstallGuard> logger) : BackgroundService
@@ -28,9 +28,18 @@ public sealed partial class UninstallGuard(ILogger<UninstallGuard> logger) : Bac
         "stop-service", "remove-service", "set-service", "stop-process", "remove-item", "uninstall-package",
         "sc.exe", "sc stop", "sc delete", "sc config", "sc sdset", "taskkill", "msiexec", "takeown", "icacls",
         "rmdir", "rd /s", "del /", " /x ", " /uninstall", "win32_product",
+        "set-itemproperty", "new-itemproperty", "new-item ", "remove-itemproperty", "debugger",
+        "image file execution", "silentprocessexit", "verifierdlls",
+        "unregister-scheduledtask", "schtasks", "disable-scheduledtask",
     ];
 
     private bool _upgradeApplied;
+    private DateTime _lastHealTask;
+
+    internal static string? ReadCommandLine(int pid) => Native.CommandLine(pid);
+
+    internal static void ApplyKeySddl(string machineRelativePath, string sddl) =>
+        Native.SetObjectSddl(machineRelativePath, Native.SeRegistryKey, sddl);
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
         Task.WhenAll(HardenLoop(stoppingToken), InterceptLoop(stoppingToken));
@@ -42,13 +51,28 @@ public sealed partial class UninstallGuard(ILogger<UninstallGuard> logger) : Bac
         {
             try
             {
-                var upgrade = UpgradeGate.IsOpen;
+                if (SelfHeal.ClearHijacks())
+                    KillHijackWriters();
+                var upgrade = UpgradeGate.IsOpen || SelfHeal.UpgradeInProgress();
+                if (upgrade && !_upgradeApplied) SelfHeal.BeginUpgrade();
+                if (!upgrade && _upgradeApplied) SelfHeal.EndUpgrade();
+                if (!upgrade) ShellGuard.Tick(harden: true);
                 if (upgrade != _upgradeApplied || (!upgrade && DateTime.UtcNow - lastAssert >= HardenEvery))
                 {
                     ApplyServiceSddl(upgrade ? UpgradeServiceSddl : HardenedServiceSddl);
                     ApplyFileAcls(upgrade);
                     ApplyRegistrySddl(upgrade);
-                    if (!upgrade) ApplyFailureRestart();
+                    RemoveLeftoverUninstaller();
+                    ProtectIfeoKeys();
+                    if (!upgrade)
+                    {
+                        ApplyFailureRestart();
+                        if (DateTime.UtcNow - _lastHealTask > TimeSpan.FromSeconds(45))
+                        {
+                            SelfHeal.Tick();
+                            _lastHealTask = DateTime.UtcNow;
+                        }
+                    }
                     _upgradeApplied = upgrade;
                     lastAssert = DateTime.UtcNow;
                 }
@@ -79,6 +103,8 @@ public sealed partial class UninstallGuard(ILogger<UninstallGuard> logger) : Bac
 
     private void TickIntercept()
     {
+        if (UpgradeGate.IsUninstalling) return;
+
         var setupSeen = false;
         foreach (var p in Process.GetProcesses())
         {
@@ -88,27 +114,36 @@ public sealed partial class UninstallGuard(ILogger<UninstallGuard> logger) : Bac
                 {
                     setupSeen = true;
                     UpgradeGate.Enter(TimeSpan.FromMinutes(15));
+                    SelfHeal.BeginUpgrade();
                 }
             }
             catch (InvalidOperationException) { }
             finally { p.Dispose(); }
         }
         UpgradeGate.MarkSetup(setupSeen);
-        if (UpgradeGate.IsOpen) return;
 
         var self = Environment.ProcessId;
+        var upgrading = UpgradeGate.IsOpen;
         foreach (var p in Process.GetProcesses())
         {
             try
             {
                 if (p.Id == self || p.Id <= 4) continue;
+                if (Native.ParentPid(p.Id) == self) continue;
                 var name = p.ProcessName;
-                if (!IsWatchedHost(name)) continue;
                 var cmd = Native.CommandLine(p.Id);
+                if (SelfHeal.IsHealProcess(cmd)) continue;
+                if (IsKoshiUninstaller(p, name, cmd))
+                {
+                    logger.LogWarning("Blocked KOSHI uninstaller: {Name} {Cmd}", name, Truncate(cmd));
+                    KillProcess(p);
+                    continue;
+                }
+                if (!IsWatchedHost(name)) continue;
                 if (!IsDangerous(name, cmd)) continue;
+                if (upgrading && IsUpgradeHelper(name, cmd)) continue;
                 logger.LogWarning("Blocked uninstall attempt: {Name} {Cmd}", name, Truncate(cmd));
-                try { p.Kill(entireProcessTree: true); }
-                catch { try { p.Kill(); } catch { /* already gone */ } }
+                KillProcess(p);
             }
             catch (InvalidOperationException) { }
             catch (Exception ex)
@@ -119,12 +154,67 @@ public sealed partial class UninstallGuard(ILogger<UninstallGuard> logger) : Bac
         }
     }
 
+    private static void KillProcess(Process p)
+    {
+        try { p.Kill(entireProcessTree: true); }
+        catch { try { p.Kill(); } catch { /* already gone */ } }
+    }
+
     private static bool IsWatchedHost(string name) => name.ToLowerInvariant() switch
     {
         "sc" or "net" or "taskkill" or "cmd" or "powershell" or "pwsh" or "powershell_ise"
-            or "wmic" or "msiexec" or "takeown" or "icacls" or "reg" => true,
-        _ => false,
+            or "wmic" or "msiexec" or "takeown" or "icacls" or "reg" or "regedit" or "regedt32"
+            or "schtasks" or "netsh"
+            or "control" or "rundll32" or "mshta" => true,
+        _ => name.StartsWith("unins", StringComparison.OrdinalIgnoreCase),
     };
+
+    /// <summary>Official KOSHI-Agent-Setup may stop the tray/service to replace files — never delete the service or run an uninstaller.</summary>
+    private static bool IsUpgradeHelper(string process, string? cmd)
+    {
+        var p = process.ToLowerInvariant();
+        var c = (cmd ?? "").ToLowerInvariant();
+        return p switch
+        {
+            "sc" => !c.Contains(" delete ", StringComparison.Ordinal)
+                    && (c.Contains(" stop ", StringComparison.Ordinal)
+                        || c.Contains(" failure ", StringComparison.Ordinal)
+                        || c.Contains(" config ", StringComparison.Ordinal)
+                        || c.Contains(" sdset ", StringComparison.Ordinal)),
+            "net" => c.Contains(" stop", StringComparison.Ordinal),
+            "taskkill" => c.Contains("koshi.agent", StringComparison.Ordinal),
+            "schtasks" => !c.Contains(" /delete", StringComparison.Ordinal)
+                          && (c.Contains("/disable", StringComparison.Ordinal)
+                              || c.Contains("/end", StringComparison.Ordinal)
+                              || c.Contains("/change", StringComparison.Ordinal)),
+            "icacls" => TargetsKoshi(c),
+            _ => false,
+        };
+    }
+
+    private static bool IsKoshiUninstaller(Process p, string name, string? cmd)
+    {
+        var n = name.ToLowerInvariant();
+        var c = cmd ?? "";
+        if (n.StartsWith("unins", StringComparison.Ordinal) && (TargetsKoshi(c) || PathLooksKoshi(p)))
+            return true;
+        if (n is "msiexec" && TargetsKoshi(c) && (c.Contains("/x", StringComparison.OrdinalIgnoreCase) || c.Contains("/uninstall", StringComparison.OrdinalIgnoreCase)))
+            return true;
+        return false;
+    }
+
+    private static bool PathLooksKoshi(Process p)
+    {
+        try
+        {
+            var path = p.MainModule?.FileName;
+            return !string.IsNullOrEmpty(path) && path.Contains("KOSHI", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
 
     private static bool IsDangerous(string process, string? cmd)
     {
@@ -135,24 +225,71 @@ public sealed partial class UninstallGuard(ILogger<UninstallGuard> logger) : Bac
 
         return p switch
         {
-            "sc" => ScMutate.IsMatch(c),
+            "sc" => ScMutate.IsMatch(c) || c.Contains(" delete ", StringComparison.Ordinal),
             "net" => c.Contains(" stop", StringComparison.Ordinal),
             "taskkill" => true,
             "msiexec" => c.Contains("/x", StringComparison.Ordinal) || c.Contains("/uninstall", StringComparison.Ordinal),
-            "takeown" or "icacls" or "reg" => true,
+            "takeown" or "icacls" or "reg" or "regedit" or "regedt32" or "schtasks" => true,
             "wmic" => c.Contains("delete", StringComparison.Ordinal) || c.Contains("stop", StringComparison.Ordinal) || c.Contains("uninstall", StringComparison.Ordinal),
+            "control" or "rundll32" => c.Contains("appwiz", StringComparison.Ordinal) || c.Contains("uninstall", StringComparison.Ordinal),
             _ => MutationMarks.Any(m => c.Contains(m, StringComparison.Ordinal)),
         };
     }
 
     private static bool TargetsKoshi(string cmd) =>
         cmd.Contains("koshi", StringComparison.OrdinalIgnoreCase)
-        || cmd.Contains("koshiagentservice", StringComparison.OrdinalIgnoreCase);
+        || cmd.Contains("koshiagentservice", StringComparison.OrdinalIgnoreCase)
+        || cmd.Contains("koshiagenthealth", StringComparison.OrdinalIgnoreCase)
+        || cmd.Contains("koshihealth", StringComparison.OrdinalIgnoreCase)
+        || (cmd.Contains("image file execution", StringComparison.OrdinalIgnoreCase) && cmd.Contains("debugger", StringComparison.OrdinalIgnoreCase))
+        || (cmd.Contains("ifeo", StringComparison.OrdinalIgnoreCase) && cmd.Contains("debugger", StringComparison.OrdinalIgnoreCase))
+        || (cmd.Contains("debugger", StringComparison.OrdinalIgnoreCase) && cmd.Contains("systray", StringComparison.OrdinalIgnoreCase))
+        || (cmd.Contains("set-itemproperty", StringComparison.OrdinalIgnoreCase) && cmd.Contains("debugger", StringComparison.OrdinalIgnoreCase))
+        || (cmd.Contains("new-itemproperty", StringComparison.OrdinalIgnoreCase) && cmd.Contains("debugger", StringComparison.OrdinalIgnoreCase));
+
+    private void KillHijackWriters()
+    {
+        foreach (var p in Process.GetProcesses())
+        {
+            try
+            {
+                var name = p.ProcessName.ToLowerInvariant();
+                if (name is not ("powershell" or "pwsh" or "powershell_ise" or "cmd" or "reg" or "regedit" or "regedt32" or "python" or "pythonw"))
+                    continue;
+                var cmd = Native.CommandLine(p.Id);
+                if (SelfHeal.IsHealProcess(cmd)) continue;
+                logger.LogWarning("Blocked IFEO hijack writer: {Name} {Cmd}", p.ProcessName, Truncate(cmd));
+                KillProcess(p);
+            }
+            catch { /* already gone */ }
+            finally { p.Dispose(); }
+        }
+    }
+
+    private void ProtectIfeoKeys()
+    {
+        foreach (var hive in new[]
+                 {
+                     @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options",
+                     @"SOFTWARE\WOW6432Node\Microsoft\Windows NT\CurrentVersion\Image File Execution Options",
+                 })
+        {
+            foreach (var image in SelfHeal.ProtectedImages)
+            {
+                try
+                {
+                    Native.SetObjectSddl($@"MACHINE\{hive}\{image}", Native.SeRegistryKey, HardenedRegistrySddl);
+                }
+                catch { /* key may not exist yet */ }
+            }
+        }
+    }
 
     private static bool IsTrustedSetup(Process p)
     {
         var name = p.ProcessName;
-        if (name.StartsWith("KOSHI-Agent-Setup", StringComparison.OrdinalIgnoreCase)) return true;
+        var path = Native.ImagePath(p.Id);
+        if (AgentSelfUpdate.IsSetup(name, path)) return true;
         if (name.StartsWith("is-", StringComparison.OrdinalIgnoreCase) || name.StartsWith("_iu", StringComparison.OrdinalIgnoreCase))
             return ParentIsTrustedSetup(p.Id, 3);
         return false;
@@ -168,7 +305,7 @@ public sealed partial class UninstallGuard(ILogger<UninstallGuard> logger) : Bac
             try
             {
                 using var p = Process.GetProcessById(ppid);
-                if (p.ProcessName.StartsWith("KOSHI-Agent-Setup", StringComparison.OrdinalIgnoreCase)) return true;
+                if (AgentSelfUpdate.IsSetup(p.ProcessName, Native.ImagePath(p.Id))) return true;
                 current = ppid;
             }
             catch (ArgumentException) { return false; }
@@ -215,6 +352,28 @@ public sealed partial class UninstallGuard(ILogger<UninstallGuard> logger) : Bac
         var adminRights = upgrade ? "F" : "RX";
         ApplyIcacls(installRoot, adminRights);
         ApplyIcacls(AgentPaths.MachineDir, adminRights);
+    }
+
+    /// <summary>Older builds left an Inno uninstaller in ARP. Remove it so Windows cannot offer "Uninstall".</summary>
+    private static void RemoveLeftoverUninstaller()
+    {
+        try
+        {
+            Registry.LocalMachine.DeleteSubKeyTree(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\{6B0C2A0E-5C1E-4C8E-9B54-6F1F0B9E2A11}_is1", throwOnMissingSubKey: false);
+            Registry.LocalMachine.DeleteSubKeyTree(@"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{6B0C2A0E-5C1E-4C8E-9B54-6F1F0B9E2A11}_is1", throwOnMissingSubKey: false);
+        }
+        catch (UnauthorizedAccessException) { }
+
+        try
+        {
+            var installRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, ".."));
+            if (!Directory.Exists(installRoot)) return;
+            foreach (var f in Directory.EnumerateFiles(installRoot, "unins*.*"))
+            {
+                try { File.Delete(f); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            }
+        }
+        catch (IOException) { }
     }
 
     private void ApplyIcacls(string path, string adminRights)
@@ -316,6 +475,22 @@ public sealed partial class UninstallGuard(ILogger<UninstallGuard> logger) : Bac
         [LibraryImport("kernel32.dll")]
         private static partial nint LocalFree(nint h);
 
+        [LibraryImport("kernel32.dll", EntryPoint = "QueryFullProcessImageNameW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool QueryFullProcessImageName(nint handle, uint flags, [Out] char[] buffer, ref uint size);
+
+        public static string? ImagePath(int pid)
+        {
+            string? path = null;
+            WithHandle(pid, h =>
+            {
+                var buffer = new char[1024];
+                var size = (uint)buffer.Length;
+                if (QueryFullProcessImageName(h, 0, buffer, ref size)) path = new string(buffer, 0, (int)size);
+            });
+            return path;
+        }
+
         public static int? ParentPid(int pid)
         {
             int? parent = null;
@@ -375,8 +550,14 @@ internal static class UpgradeGate
     private static long _untilTicks;
     private static int _setupSeen;
 
+    private static int _uninstalling;
+
+    public static bool IsUninstalling => Volatile.Read(ref _uninstalling) != 0;
+
     public static bool IsOpen =>
-        DateTime.UtcNow.Ticks < Interlocked.Read(ref _untilTicks) || Volatile.Read(ref _setupSeen) != 0;
+        IsUninstalling
+        || DateTime.UtcNow.Ticks < Interlocked.Read(ref _untilTicks)
+        || Volatile.Read(ref _setupSeen) != 0;
 
     public static void Enter(TimeSpan duration)
     {
@@ -387,4 +568,11 @@ internal static class UpgradeGate
     }
 
     public static void MarkSetup(bool seen) => Volatile.Write(ref _setupSeen, seen ? 1 : 0);
+
+    /// <summary>Admin-initiated remote uninstall: UninstallGuard stops intercepting so the remover script can run.</summary>
+    public static void AllowUninstall()
+    {
+        Volatile.Write(ref _uninstalling, 1);
+        Enter(TimeSpan.FromMinutes(15));
+    }
 }

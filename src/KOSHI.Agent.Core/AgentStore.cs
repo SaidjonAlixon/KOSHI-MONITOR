@@ -5,7 +5,7 @@ using System.Text.Json;
 
 namespace KOSHI.Agent.Core;
 
-public sealed record AgentConfig(string ServerUrl, Guid DeviceId, string DisplayName, DateTime ActivatedAt);
+public sealed record AgentConfig(string ServerUrl, Guid DeviceId, string DisplayName, DateTime ActivatedAt, DateTime? LicenseExpiresAt = null);
 
 public static class AgentPaths
 {
@@ -71,10 +71,29 @@ public static class AgentStore
         WriteAtomic(AgentPaths.CredentialFile, ProtectedData.Protect(Encoding.UTF8.GetBytes(credential), Entropy, DataProtectionScope.LocalMachine));
     }
 
+    public static void SaveConfig(AgentConfig config)
+    {
+        Directory.CreateDirectory(AgentPaths.MachineDir);
+        WriteAtomic(AgentPaths.ConfigFile, Encoding.UTF8.GetBytes(JsonSerializer.Serialize(config, Json)));
+    }
+
     public static void Delete()
     {
         foreach (var f in new[] { AgentPaths.ConfigFile, AgentPaths.CredentialFile })
             if (File.Exists(f)) File.Delete(f);
+    }
+
+    public static bool TryDelete()
+    {
+        try
+        {
+            Delete();
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     private static void WriteAtomic(string path, byte[] data)

@@ -22,7 +22,7 @@ public sealed class RoleService(IKoshiDbContext db, RolePermissionCache cache, A
     public async Task<RoleDto> CreateAsync(UpsertRoleRequest r, CancellationToken ct = default)
     {
         var name = r.Name.Trim();
-        if (await db.Roles.AnyAsync(x => x.Name == name, ct)) throw Errors.Conflict("A role with this name already exists.");
+        if (await db.Roles.AnyAsync(x => x.Name == name, ct)) throw Errors.Conflict("Bu nomli rol allaqachon mavjud.");
         var role = new Role
         {
             Id = Guid.NewGuid(), Name = name, Description = r.Description.Trim(), Permissions = ValidatePermissions(r.Permissions),
@@ -37,11 +37,11 @@ public sealed class RoleService(IKoshiDbContext db, RolePermissionCache cache, A
 
     public async Task<RoleDto> UpdateAsync(Guid id, UpsertRoleRequest r, CancellationToken ct = default)
     {
-        var role = await db.Roles.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw Errors.NotFound("Role");
+        var role = await db.Roles.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw Errors.NotFound("Rol");
         var name = r.Name.Trim();
-        if (role.IsSystem && name != role.Name) throw Errors.Conflict("Built-in roles cannot be renamed.");
+        if (role.IsSystem && name != role.Name) throw Errors.Conflict("Tizim rollarini qayta nomlab bo‘lmaydi.");
         if (!role.IsSystem && name != role.Name && await db.Roles.AnyAsync(x => x.Name == name && x.Id != id, ct))
-            throw Errors.Conflict("A role with this name already exists.");
+            throw Errors.Conflict("Bu nomli rol allaqachon mavjud.");
 
         var before = role.Permissions.ToList();
         role.Name = name;
@@ -63,9 +63,9 @@ public sealed class RoleService(IKoshiDbContext db, RolePermissionCache cache, A
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
-        var role = await db.Roles.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw Errors.NotFound("Role");
-        if (role.IsSystem) throw Errors.Conflict("Built-in roles cannot be deleted.");
-        if (await db.UserRoles.AnyAsync(ur => ur.RoleId == id, ct)) throw Errors.Conflict("Remove this role from all users before deleting it.");
+        var role = await db.Roles.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw Errors.NotFound("Rol");
+        if (role.Name == RoleNames.SuperAdmin) throw Errors.Conflict("Super Admin rolini o‘chirib bo‘lmaydi.");
+        if (await db.UserRoles.AnyAsync(ur => ur.RoleId == id, ct)) throw Errors.Conflict("Avval bu rolni barcha foydalanuvchilardan olib tashlang, so‘ng o‘chiring.");
         db.Roles.Remove(role);
         audit.Record("role.delete", "Role", id, new { role.Name });
         await db.SaveChangesAsync(ct);
@@ -82,8 +82,8 @@ public sealed class RoleService(IKoshiDbContext db, RolePermissionCache cache, A
     {
         var list = requested.Distinct(StringComparer.Ordinal).ToList();
         var unknown = list.Where(p => !Permissions.All.Contains(p)).ToList();
-        if (unknown.Count > 0) throw Errors.Validation("Permissions", $"Unknown permissions: {string.Join(", ", unknown)}");
-        if (list.Any(Permissions.NonAssignable.Contains)) throw Errors.Validation("Permissions", "roles.manage is reserved for Super Admin.");
+        if (unknown.Count > 0) throw Errors.Validation("Permissions", $"Noma’lum ruxsatlar: {string.Join(", ", unknown)}");
+        if (list.Any(Permissions.NonAssignable.Contains)) throw Errors.Validation("Permissions", "roles.manage faqat Super Adminga tegishli va boshqa rollarga berilmaydi.");
         return list.OrderBy(p => p, StringComparer.Ordinal).ToList();
     }
 

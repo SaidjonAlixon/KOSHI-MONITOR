@@ -37,7 +37,7 @@ export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
   {
     title: 'Tahlil',
     items: [
-      { to: '/app/productivity', label: 'Unumdorlik', icon: BarChart3, permission: Permissions.ReportsRead },
+      { to: '/app/productivity', label: 'Kompyuter faoliyati', icon: BarChart3, permission: Permissions.ReportsRead },
       { to: '/app/reports', label: 'Hisobotlar', icon: FileSpreadsheet, permission: Permissions.ReportsRead },
     ],
   },

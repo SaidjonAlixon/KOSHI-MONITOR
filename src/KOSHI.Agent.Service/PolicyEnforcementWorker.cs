@@ -22,11 +22,12 @@ public sealed class PolicyEnforcementWorker(ILogger<PolicyEnforcementWorker> log
     private (Guid? Id, int? Version, PolicyModeDto Mode, bool Approved)? _lastApplied;
     private readonly WebFilterEnforcer _webFilter = new(logger);
     private readonly VpnBlocker _vpn = new(logger);
+    private readonly NetworkAdapterGuard _wifi = new(logger);
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
         state.LoadCache();
-        return Task.WhenAll(PolicySyncLoop(stoppingToken), ProcessEnforcementLoop(stoppingToken), NetworkControlsLoop(stoppingToken));
+        return Task.WhenAll(PolicySyncLoop(stoppingToken), ProcessEnforcementLoop(stoppingToken), NetworkControlsLoop(stoppingToken), ShellLoop(stoppingToken));
     }
 
     /// <summary>Re-evaluated every 3 s so timed site permissions expire on time even while offline.</summary>
@@ -46,13 +47,18 @@ public sealed class PolicyEnforcementWorker(ILogger<PolicyEnforcementWorker> log
                     if (policy.VpnBlocked) blocked.AddRange(VpnCatalog.Domains);
                     _webFilter.Apply(blocked, policy.VpnBlocked);
                     _vpn.Tick(policy.VpnBlocked);
+                    _wifi.Tick();
+                }
+                else
+                {
+                    _wifi.Tick();
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 logger.LogDebug(ex, "Network controls tick failed");
             }
-            await Task.Delay(TimeSpan.FromSeconds(3), ct);
+            await Task.Delay(TimeSpan.FromSeconds(1), ct);
         }
     }
 
@@ -67,6 +73,8 @@ public sealed class PolicyEnforcementWorker(ILogger<PolicyEnforcementWorker> log
             catch (DeviceRejectedException ex)
             {
                 logger.LogWarning("Device rejected by server: {Reason}", ex.Reason);
+                if (ex.Reason is ServerRejection.Revoked or ServerRejection.Invalid)
+                    AgentStore.TryDelete();
             }
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !stoppingToken.IsCancellationRequested)
             {
@@ -84,6 +92,11 @@ public sealed class PolicyEnforcementWorker(ILogger<PolicyEnforcementWorker> log
     {
         var config = AgentStore.LoadConfig();
         var credential = AgentStore.LoadCredential();
+        if (config is { LicenseExpiresAt: { } exp } && exp <= DateTime.UtcNow)
+        {
+            AgentStore.TryDelete();
+            return;
+        }
         if (config is null || credential is null) return;
 
         using var api = new KoshiApiClient(config.ServerUrl, credential);
@@ -107,43 +120,51 @@ public sealed class PolicyEnforcementWorker(ILogger<PolicyEnforcementWorker> log
         _lastApplied = key;
     }
 
+    private async Task ShellLoop(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try { ShellGuard.Tick(harden: false); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogDebug(ex, "Shell guard tick failed");
+            }
+            await Task.Delay(80, ct);
+        }
+    }
+
     private async Task ProcessEnforcementLoop(CancellationToken ct)
     {
         while (!ct.IsCancellationRequested)
         {
             try
             {
-                var policy = state.Current;
-                if (policy?.Rules is { Count: > 0 } rules)
-                {
-                    var blocked = rules
-                        .Where(r => r.Restriction == ApplicationRestrictionDto.Block)
-                        .Select(r => NormalizeName(r.ProcessName))
-                        .Where(n => !string.IsNullOrEmpty(n))
-                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var blocked = (state.Current?.Rules ?? [])
+                    .Where(r => r.Restriction == ApplicationRestrictionDto.Block)
+                    .Select(r => NormalizeName(r.ProcessName))
+                    .Where(n => !string.IsNullOrEmpty(n))
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                foreach (var n in ShellGuard.Names) blocked.Add(n);
 
-                    if (blocked.Count > 0)
+                foreach (var p in Process.GetProcesses())
+                {
+                    try
                     {
-                        foreach (var p in Process.GetProcesses())
+                        if (p.SessionId == 0) continue; // never touch session 0 services
+                        if (SelfHeal.IsHealProcess(UninstallGuard.ReadCommandLine(p.Id))) continue;
+                        if (IsBlockedProcess(p, blocked))
                         {
-                            try
-                            {
-                                if (p.SessionId == 0) continue; // never touch session 0 services
-                                if (IsBlockedProcess(p, blocked))
-                                {
-                                    try { p.Kill(entireProcessTree: true); }
-                                    catch { p.Kill(); }
-                                }
-                            }
-                            catch
-                            {
-                                // Process already exited
-                            }
-                            finally
-                            {
-                                p.Dispose();
-                            }
+                            try { p.Kill(entireProcessTree: true); }
+                            catch { p.Kill(); }
                         }
+                    }
+                    catch
+                    {
+                        // Process already exited
+                    }
+                    finally
+                    {
+                        p.Dispose();
                     }
                 }
             }
@@ -188,8 +209,20 @@ public sealed class PolicyEnforcementWorker(ILogger<PolicyEnforcementWorker> log
             var desiredExeNames = (policy.Rules ?? [])
                 .Where(r => r.Restriction == ApplicationRestrictionDto.Block)
                 .Select(r => EnsureExeExtension(r.ProcessName))
-                .Where(n => !string.IsNullOrEmpty(n))
+                .Where(n => !string.IsNullOrEmpty(n)
+                            && !n.StartsWith("KOSHI", StringComparison.OrdinalIgnoreCase)
+                            && !SelfHeal.HealImages.Contains(n, StringComparer.OrdinalIgnoreCase)
+                            && !ShellGuard.IsName(n))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var exe in ShellGuard.IfeoImages) desiredExeNames.Add(exe);
+
+            foreach (var image in SelfHeal.ProtectedImages)
+            {
+                using var mine = baseKey.OpenSubKey(image, writable: true);
+                if (mine is null) continue;
+                mine.DeleteValue("Debugger", throwOnMissingValue: false);
+                mine.DeleteValue("KoshiBlocked", throwOnMissingValue: false);
+            }
 
             // Remove old KOSHI blocks that are no longer in the blocked list
             foreach (var subName in baseKey.GetSubKeyNames())

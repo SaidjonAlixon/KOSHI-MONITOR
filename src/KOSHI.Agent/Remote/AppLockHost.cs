@@ -126,7 +126,8 @@ public sealed class AppLockHost : IAppLockHost
 
             try
             {
-                var dialog = new AppLockWindow(rule.Name, rule.ProcessName, pwd => AppLock.Verify(rule, pwd));
+                var dialog = new AppLockWindow(rule.Name, rule.ProcessName, pwd => AppLock.Verify(rule, pwd),
+                    mustEnterPassword: rule.Id == Guid.Empty);
                 dialog.Activate();
                 return dialog.ShowDialog() == true;
             }
@@ -148,7 +149,8 @@ public sealed class AppLockHost : IAppLockHost
             return true;
         }
 
-        // Terminate while still hidden and suspended so the window never flashes back
+        // X / Yopish: never resume. Kill the protected app so the desktop is usable again.
+        // Settings stays closed until the user opens it (password is asked again).
         TerminateApp(rule.ProcessName);
         return false;
     }
@@ -156,6 +158,23 @@ public sealed class AppLockHost : IAppLockHost
     public void TerminateApp(string processName)
     {
         var pids = GetMatchingSessionPids(processName);
+        if (pids.Count > 0)
+        {
+            EnumWindows((hWnd, _) =>
+            {
+                if (WindowBelongsToPids(hWnd, pids)) ShowWindow(hWnd, SwHide);
+                return true;
+            }, 0);
+            foreach (var pid in pids)
+            {
+                var hProc = OpenProcess(ProcessSuspendResume, false, pid);
+                if (hProc != 0)
+                {
+                    try { _ = NtSuspendProcess(hProc); }
+                    finally { CloseHandle(hProc); }
+                }
+            }
+        }
         foreach (var pid in pids)
         {
             try

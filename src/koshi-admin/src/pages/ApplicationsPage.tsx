@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Monitor, Pencil, Plus, Trash2, Undo2, UserRound } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { InstallControlCard, SiteBlockCard, VpnControlCard } from '@/components/DeviceControls'
+import { useSearchParams } from 'react-router'
+import { ApplyAllRestrictionsBar, InstallControlCard, PerDeviceRestrictionsCard, SiteBlockCard, VpnControlCard } from '@/components/DeviceControls'
 import { Checkbox, Field, FilterBar, Input, Modal, PageHeader, Select, defaultFilters, filtersToQuery, tableClass, tbodyClass, td, th, theadClass, useDevicesLookup, useEmployeesLookup, type Filters } from '@/components/forms'
 import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, LoadingState, formatDuration } from '@/components/ui'
 import { api } from '@/lib/api'
@@ -96,8 +97,8 @@ function RuleForm({ policyId, draft, onDone }: { policyId: string; draft: Draft;
           />
           {d.requirePassword && (
             <div className="mt-2">
-              <Field label={d.id ? 'Yangi parol (bo‘sh — eskisi qoladi)' : 'Parol'} hint="Faqat admin biladigan parol. Agent uni mahalliy tekshiradi.">
-                <Input type="text" minLength={4} maxLength={128} value={d.password} onChange={(e) => set({ password: e.target.value })} placeholder="kamida 4 belgi" />
+              <Field label={d.id ? 'Yangi parol (bo‘sh — eskisi qoladi)' : 'Parol'} hint="Parol ochiq ko‘rinadi. Faqat admin biladigan parol. Agent uni mahalliy tekshiradi.">
+                <Input type="text" minLength={4} maxLength={128} value={d.password} onChange={(e) => set({ password: e.target.value })} placeholder="kamida 4 belgi" autoComplete="off" />
               </Field>
             </div>
           )}
@@ -134,7 +135,12 @@ export function ApplicationsPage() {
   const { can } = useAuth()
   const qc = useQueryClient()
   const manage = can(Permissions.PoliciesManage)
-  const [filters, setFilters] = useState<Filters>(defaultFilters(30))
+  const [params] = useSearchParams()
+  const [filters, setFilters] = useState<Filters>(() => ({
+    ...defaultFilters(30),
+    deviceId: params.get('deviceId') ?? '',
+    employeeId: params.get('employeeId') ?? '',
+  }))
   const [draft, setDraft] = useState<Draft | null>(null)
   const [editPolicyId, setEditPolicyId] = useState('')
 
@@ -437,11 +443,13 @@ export function ApplicationsPage() {
         </Card>
       </div>
       <FilterBar value={filters} onChange={setFilters} show={['date']} />
+      <SiteBlockCard manage={manage} deviceId={deviceId || undefined} />
+      <ApplyAllRestrictionsBar manage={manage} />
       <div className="grid gap-6 xl:grid-cols-2">
-        <SiteBlockCard manage={manage} deviceId={deviceId || undefined} />
         <VpnControlCard manage={manage} />
         <InstallControlCard manage={manage} />
       </div>
+      <PerDeviceRestrictionsCard manage={manage} />
       <Modal open={draft !== null} title={draft?.id ? 'Qoidani tahrirlash' : 'Yangi qoida'} onClose={() => setDraft(null)} wide>
         {draft && <RuleForm policyId={editPolicyId || policyId} draft={draft} onDone={() => setDraft(null)} />}
       </Modal>

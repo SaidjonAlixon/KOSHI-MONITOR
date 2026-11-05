@@ -1,11 +1,13 @@
 import { HubConnectionBuilder, HubConnectionState, LogLevel, type HubConnection } from '@microsoft/signalr'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Eye, Lock, LogOut, Maximize, MessageSquare, MousePointerClick, Power, RotateCcw, Square, XCircle, XOctagon } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type WheelEvent } from 'react'
+import { ArrowLeft, Eye, Lock, LogOut, Maximize, MessageSquare, MousePointerClick, PackageX, Power, RotateCcw, Square, XCircle, XOctagon } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode, type WheelEvent } from 'react'
 import { Link, useParams } from 'react-router'
+import { DeviceEventsFeed } from '@/components/DeviceEvents'
 import { PageHeader, Select } from '@/components/forms'
 import { Badge, Button, Card } from '@/components/ui'
 import { api, getAccessToken } from '@/lib/api'
+import { Permissions, useAuth } from '@/lib/auth'
 import type { Device } from '@/lib/types'
 
 type Status = 'connecting' | 'ready' | 'starting' | 'live' | 'ended' | 'error'
@@ -24,7 +26,18 @@ function decodeBase64(data: string | Uint8Array): Uint8Array {
   return bytes
 }
 
+function ToolGroup({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+  return (
+    <div className="rounded-xl border border-slate-200 p-3 dark:border-white/10">
+      <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{title}</p>
+      {hint && <p className="mb-2 text-[11px] text-slate-400">{hint}</p>}
+      <div className={`flex flex-wrap gap-2 ${hint ? '' : 'mt-2'}`}>{children}</div>
+    </div>
+  )
+}
+
 export function RemotePage() {
+  const { can } = useAuth()
   const { deviceId = '' } = useParams()
   const device = useQuery({ queryKey: ['device', deviceId], queryFn: () => api<Device>(`/api/devices/${deviceId}`) })
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -114,7 +127,7 @@ export function RemotePage() {
     try {
       const q = QUALITY[quality]
       sessionRef.current = await conn.invoke<string>('Start', deviceId, q.quality, q.maxWidth, q.fps)
-      addLog(control ? 'Boshqaruv sessiyasi boshlandi — xodim ekranida ogohlantirish ko‘rsatildi' : 'Jonli kuzatuv boshlandi — xodim ekranida ogohlantirish ko‘rsatildi')
+      addLog(control ? 'Boshqaruv sessiyasi boshlandi' : 'Jonli kuzatuv boshlandi — xodim ekranida hech narsa ko‘rinmaydi')
       if (control) canvasRef.current?.focus()
     } catch (e) {
       setStatus('error')
@@ -202,7 +215,7 @@ export function RemotePage() {
     <>
       <PageHeader
         title={`Masofaviy boshqaruv — ${device.data?.displayName ?? '…'}`}
-        subtitle="Xodim ekranida sessiya davomida ogohlantirish banneri ko‘rinadi va u sessiyani tugatishi mumkin. Har bir sessiya va buyruq audit jurnaliga yoziladi."
+        subtitle="Jonli ko‘rish xodim ekranida ko‘rinmaydi va u ✕ bilan yopa olmaydi. Sessiyani faqat administrator to‘xtatadi. Har bir sessiya va buyruq audit jurnaliga yoziladi."
         actions={
           <Link to="/app/devices" className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10">
             <ArrowLeft className="size-4" /> Qurilmalar
@@ -210,16 +223,21 @@ export function RemotePage() {
         }
       />
 
-      <Card className="p-3">
-        <div className="flex flex-wrap items-center gap-2">
+      <Card className="p-4">
+        {/* Sessiya: kuzatuv / boshqaruv */}
+        <div className="flex flex-wrap items-center gap-3">
           <Badge tone={tone}>{statusLabel}</Badge>
+          {live && <Badge tone={controlEnabled ? 'blue' : 'green'}>{controlEnabled ? 'Boshqaruv rejimi' : 'Kuzatuv rejimi'}</Badge>}
           {device.data && <span className="text-xs text-slate-500">{device.data.employeeName ?? 'biriktirilmagan'} · {device.data.hostname}</span>}
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            <Select value={quality} onChange={(e) => setQuality(e.target.value as keyof typeof QUALITY)} disabled={live} className="w-36" aria-label="Sifat">
-              <option value="low">Past (tez)</option>
-              <option value="medium">O‘rta</option>
-              <option value="high">Yuqori</option>
-            </Select>
+            <label className="flex items-center gap-1.5 text-xs text-slate-500" title="Jonli ko‘rish tasvirining sifati va tezligi. Past — tezroq, kam internet; Yuqori — aniqroq, ko‘proq internet.">
+              Tasvir sifati
+              <Select value={quality} onChange={(e) => setQuality(e.target.value as keyof typeof QUALITY)} disabled={live} className="w-32" aria-label="Jonli ko‘rish tasviri sifati">
+                <option value="low">Past (tez)</option>
+                <option value="medium">O‘rta</option>
+                <option value="high">Yuqori (aniq)</option>
+              </Select>
+            </label>
             {live ? (
               <>
                 <Button variant={controlEnabled ? 'primary' : 'secondary'} onClick={() => setControlEnabled((v) => !v)} title="Sichqoncha va klaviatura boshqaruvini yoqish/o‘chirish">
@@ -245,33 +263,83 @@ export function RemotePage() {
             </Button>
           </div>
         </div>
-        <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-100 pt-3 dark:border-white/5">
-          <Button variant="secondary" onClick={() => command('lock')} disabled={status === 'error'}>
-            <Lock className="size-4" /> Bloklash
-          </Button>
-          <Button variant="secondary" onClick={() => { const m = prompt('Xodimga xabar:'); if (m) void command('message', m.slice(0, 500)) }}>
-            <MessageSquare className="size-4" /> Xabar
-          </Button>
-          <Button variant="secondary" onClick={() => { const p = prompt('Yopiladigan jarayon (masalan, chrome.exe):'); if (p) void command('kill-process', p) }}>
-            <XOctagon className="size-4" /> Jarayonni yopish
-          </Button>
-          <Button variant="secondary" onClick={() => confirm('Foydalanuvchi sessiyadan chiqarilsinmi?') && command('logoff')}>
-            <LogOut className="size-4" /> Chiqish
-          </Button>
-          <Button variant="secondary" onClick={() => confirm('Kompyuter 60 soniyadan keyin qayta ishga tushsinmi?') && command('restart')}>
-            <RotateCcw className="size-4" /> Qayta ishga tushirish
-          </Button>
-          <Button variant="danger" onClick={() => confirm('Kompyuter 60 soniyadan keyin o‘chirilsinmi?') && command('shutdown')}>
-            <Power className="size-4" /> O‘chirish
-          </Button>
-          <Button variant="ghost" onClick={() => command('cancel-shutdown')}>
-            <XCircle className="size-4" /> Bekor qilish
-          </Button>
+
+        {/* Rejim banneri — boshqaruv va kuzatuv aniq farqlanadi */}
+        {live && (
+          <div
+            className={`mt-3 rounded-xl px-4 py-2 text-xs ring-1 ${
+              controlEnabled
+                ? 'bg-brand-50 text-brand-700 ring-brand-500/20 dark:bg-brand-500/10 dark:text-brand-200'
+                : 'bg-emerald-50 text-emerald-700 ring-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200'
+            }`}
+          >
+            {controlEnabled
+              ? 'Boshqaruv rejimi yoniq: sichqoncha va klaviatura shu kompyuterni boshqaradi. Klaviatura uchun ekran ustiga bosing.'
+              : 'Kuzatuv rejimi: ekran faqat ko‘rinmoqda, hech narsa boshqarilmaydi. Xodim ekranida hech nima ko‘rinmaydi.'}
+          </div>
+        )}
+
+        {/* Guruhlangan amallar */}
+        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+          <ToolGroup title="Xodim bilan ishlash" hint="Ekranni bloklash, xabar yuborish, dasturni yopish">
+            <Button variant="secondary" onClick={() => command('lock')} disabled={status === 'error'}>
+              <Lock className="size-4" /> Bloklash
+            </Button>
+            <Button variant="secondary" onClick={() => { const m = prompt('Xodimga xabar:'); if (m) void command('message', m.slice(0, 500)) }}>
+              <MessageSquare className="size-4" /> Xabar
+            </Button>
+            <Button variant="secondary" onClick={() => { const p = prompt('Yopiladigan jarayon (masalan, chrome.exe):'); if (p) void command('kill-process', p) }}>
+              <XOctagon className="size-4" /> Jarayonni yopish
+            </Button>
+          </ToolGroup>
+
+          <ToolGroup title="Quvvat boshqaruvi" hint="Sessiyadan chiqish, qayta ishga tushirish yoki o‘chirish">
+            <Button variant="secondary" onClick={() => confirm('Foydalanuvchi sessiyadan chiqarilsinmi?') && command('logoff')}>
+              <LogOut className="size-4" /> Chiqish
+            </Button>
+            <Button variant="secondary" onClick={() => confirm('Kompyuter 60 soniyadan keyin qayta ishga tushsinmi?') && command('restart')}>
+              <RotateCcw className="size-4" /> Qayta ishga tushirish
+            </Button>
+            <Button variant="danger" onClick={() => confirm('Kompyuter 60 soniyadan keyin o‘chirilsinmi?') && command('shutdown')}>
+              <Power className="size-4" /> O‘chirish
+            </Button>
+            <Button variant="ghost" onClick={() => command('cancel-shutdown')}>
+              <XCircle className="size-4" /> Bekor qilish
+            </Button>
+          </ToolGroup>
+
+          {can(Permissions.DevicesManage) && (
+            <div className="rounded-xl border-2 border-rose-300 bg-rose-50/60 p-3 dark:border-rose-500/40 dark:bg-rose-500/10">
+              <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-wide text-rose-600 dark:text-rose-300">Xavfli amal</p>
+              <p className="mb-2 text-[11px] text-rose-500/90 dark:text-rose-300/80">KOSHI dasturini shu kompyuterdan butunlay olib tashlaydi. Qaytarib bo‘lmaydi.</p>
+              <Button
+                className="w-full !bg-rose-800 !text-white hover:!bg-rose-900"
+                onClick={async () => {
+                  if (!confirm(`1/2 — ${device.data?.displayName ?? 'Bu kompyuter'} dan KOSHI butunlay o‘chirilsinmi?\n\nDastur, xizmat va fayllar o‘chadi.`)) return
+                  if (!confirm('2/2 — Rostan ham o‘chirasizmi? Bu amalni qaytarib bo‘lmaydi.')) return
+                  try {
+                    await api(`/api/devices/${deviceId}/uninstall`, { method: 'POST' })
+                    addLog('KOSHI bu kompyuterdan o‘chirilmoqda')
+                    setStatus('ended')
+                    setMessage('Agent o‘chirilmoqda')
+                  } catch (e) {
+                    addLog(`✖ ${(e as Error).message}`)
+                  }
+                }}
+              >
+                <PackageX className="size-4" /> Kompyuterdan o‘chirish
+              </Button>
+            </div>
+          )}
         </div>
       </Card>
 
       <div className="grid gap-4 xl:grid-cols-[1fr_300px]">
-        <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-ink-950 dark:border-white/10">
+        <div
+          className={`relative overflow-hidden rounded-2xl border bg-ink-950 transition ${
+            controlEnabled && live ? 'border-brand-500 ring-2 ring-brand-500/40' : 'border-slate-200 dark:border-white/10'
+          }`}
+        >
           <canvas
             ref={canvasRef}
             tabIndex={0}
@@ -290,12 +358,20 @@ export function RemotePage() {
             </div>
           )}
         </div>
-        <Card className="p-4">
-          <p className="text-sm font-semibold">Hodisalar</p>
-          <ul className="mt-2 space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
-            {log.length === 0 ? <li className="text-slate-400">Hali hodisa yo‘q</li> : log.map((l, i) => <li key={i}>{l}</li>)}
-          </ul>
-        </Card>
+        <div className="space-y-4">
+          <Card className="p-4">
+            <p className="text-sm font-semibold">Sessiya jurnali</p>
+            <p className="mb-2 text-[11px] text-slate-400">Shu masofaviy sessiyada bajarilgan amallar</p>
+            <ul className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
+              {log.length === 0 ? <li className="text-slate-400">Hali amal yo‘q</li> : log.map((l, i) => <li key={i}>{l}</li>)}
+            </ul>
+          </Card>
+          <Card className="p-4">
+            <p className="text-sm font-semibold">Kompyuter hodisalari</p>
+            <p className="mb-2 text-[11px] text-slate-400">Har kun alohida saqlanadi. Dastur ochilishi/yopilishi, kompyuter yoqilishi/o‘chishi — aniq vaqt bilan</p>
+            <DeviceEventsFeed deviceId={deviceId} compact />
+          </Card>
+        </div>
       </div>
     </>
   )

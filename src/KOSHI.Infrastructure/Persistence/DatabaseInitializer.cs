@@ -29,6 +29,7 @@ public sealed class BootstrapOptions
 public sealed class DatabaseInitializer(
     KoshiDbContext db,
     IPasswordHasher hasher,
+    ISecretBox secrets,
     DatabaseOptions dbOptions,
     BootstrapOptions bootstrap,
     TimeProvider clock,
@@ -59,9 +60,11 @@ public sealed class DatabaseInitializer(
             }
             else
             {
-                // Permissions introduced after the role was created are granted to built-in roles that have them by default.
-                var missing = new[] { Permissions.SupportChat, Permissions.LocationRead }
-                    .Where(p => defaults.Contains(p) && !role.Permissions.Contains(p)).ToList();
+                // ITAdmin always gets every operational permission. Other built-in roles only pick up newly introduced keys.
+                var grant = role.Name == RoleNames.ITAdmin
+                    ? defaults
+                    : (IReadOnlyList<string>)[Permissions.SupportChat, Permissions.LocationRead];
+                var missing = grant.Where(p => defaults.Contains(p) && !role.Permissions.Contains(p)).ToList();
                 if (missing.Count > 0)
                 {
                     role.Permissions = [.. role.Permissions, .. missing];
@@ -79,7 +82,8 @@ public sealed class DatabaseInitializer(
             await db.SaveChangesAsync(ct);
         }
 
-        var legacyNotice = await db.SystemSettings.FirstOrDefaultAsync(s => s.Key == SettingsService.Keys.MonitoringNotice && s.Value.StartsWith("Bu korporativ kompyuter"), ct);
+        var legacyNotice = await db.SystemSettings.FirstOrDefaultAsync(s => s.Key == SettingsService.Keys.MonitoringNotice && (
+            s.Value.StartsWith("Bu korporativ kompyuter") || s.Value == "Korporativ kompyuter monitoringi faol."), ct);
         if (legacyNotice is not null)
         {
             legacyNotice.Value = SettingsService.Defaults.MonitoringNotice;
@@ -137,6 +141,7 @@ public sealed class DatabaseInitializer(
             NormalizedEmail = AuthService.NormalizeEmail(bootstrap.AdminEmail),
             DisplayName = bootstrap.AdminDisplayName,
             PasswordHash = hasher.Hash(bootstrap.AdminPassword),
+            PasswordSecret = secrets.Seal(bootstrap.AdminPassword),
             CreatedAt = now,
             UpdatedAt = now,
         };

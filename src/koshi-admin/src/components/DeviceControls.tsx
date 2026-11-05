@@ -5,7 +5,7 @@ import { Link } from 'react-router'
 import { Field, Input, Modal, Select, tableClass, tbodyClass, td, th, theadClass, useDevicesLookup } from '@/components/forms'
 import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, LoadingState, formatDateTime } from '@/components/ui'
 import { ApiError, api } from '@/lib/api'
-import type { BlockedSite, DeviceControls } from '@/lib/types'
+import type { BlockedSite, Device, DeviceControls, PagedResult } from '@/lib/types'
 
 const CATEGORIES = ['Ijtimoiy tarmoqlar', 'Video va kino', 'O‘yinlar', 'Onlayn do‘konlar', 'Tikish (bukmeker)', 'Yangiliklar', 'Boshqa'] as const
 
@@ -372,10 +372,25 @@ function useControls() {
   const qc = useQueryClient()
   const q = useQuery({ queryKey: ['device-controls'], queryFn: () => api<DeviceControls>('/api/web-filter/controls') })
   const save = useMutation({
-    mutationFn: (body: { vpnBlocked: boolean; installBlocked: boolean }) => api<DeviceControls>('/api/web-filter/controls', { method: 'PUT', body }),
-    onSuccess: (data) => qc.setQueryData(['device-controls'], data),
+    mutationFn: (body: { vpnBlocked: boolean; installBlocked: boolean; applyToAllDevices?: boolean }) =>
+      api<DeviceControls>('/api/web-filter/controls', { method: 'PUT', body }),
+    onSuccess: (data, body) => {
+      qc.setQueryData(['device-controls'], data)
+      if (body.applyToAllDevices) {
+        void qc.invalidateQueries({ queryKey: ['devices'] })
+        void qc.invalidateQueries({ queryKey: ['devices-lookup'] })
+      }
+    },
   })
   return { q, save }
+}
+
+function effectiveFlag(override: boolean | null | undefined, global: boolean) {
+  return override ?? global
+}
+
+function inheritOrOverride(wanted: boolean, global: boolean): boolean | null {
+  return wanted === global ? null : wanted
 }
 
 function Switch({ checked, disabled, onChange, label }: { checked: boolean; disabled?: boolean; onChange: (v: boolean) => void; label: string }) {
@@ -474,16 +489,176 @@ export function InstallControlCard({ manage }: { manage: boolean }) {
     >
       <p>Yoqilganda xodim oddiy yoki “administrator sifatida” ishga tushirishidan qat’i nazar:</p>
       <ul className="list-disc space-y-1 pl-5">
-        <li>har qanday o‘rnatuvchi (setup.exe, .msi, winget, App Installer, Microsoft Store) ishga tushishi bilan muzlatiladi;</li>
-        <li>ekranda parol oynasi chiqadi — <b>Tizim himoyasi paroli</b> to‘g‘ri kiritilsagina o‘rnatish davom etadi (10 daqiqa ruxsat);</li>
-        <li>parol 3 marta noto‘g‘ri kiritilsa, bekor qilinsa yoki 2,5 daqiqada kiritilmasa — o‘rnatish yopiladi.</li>
+        <li>Yuklab olishlar, Ish stoli, Temp va USB’dan ishga tushirilgan har qanday .exe/.msi muzlatiladi;</li>
+        <li>setup, msiexec, winget, Microsoft Store va boshqa o‘rnatuvchilar ham shu zahoti to‘xtatiladi;</li>
+        <li>ekranda parol oynasi chiqadi — <b>Tizim himoyasi paroli</b> to‘g‘ri kiritilsagina faqat shu o‘rnatish davom etadi;</li>
+        <li>parol 3 marta noto‘g‘ri kiritilsa, bekor qilinsa yoki 3 daqiqada kiritilmasa — o‘rnatish yopiladi.</li>
       </ul>
-      <p className="text-slate-500">O‘rnatilgan dasturlarning yangilanishi va o‘chirish (uninstall) cheklanmaydi.</p>
+      <p className="text-slate-500">Program Files ichidagi allaqachon o‘rnatilgan dasturlarning o‘zi ochilishi cheklanmaydi. Cheklov agent yangilangach (Yangilash) kuchga kiradi.</p>
       {!c.protectionPasswordSet && (
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
           Avval <Link to="/app/settings" className="font-semibold underline">Sozlamalar → Tizim himoyasi</Link> bo‘limida himoya parolini o‘rnating — o‘rnatish shu parol bilan ochiladi.
         </p>
       )}
     </ControlCard>
+  )
+}
+
+export function ApplyAllRestrictionsBar({ manage }: { manage: boolean }) {
+  const { q, save } = useControls()
+  if (!manage) return null
+  if (q.isPending || q.isError || !q.data) return null
+  const c = q.data
+  const allOn = c.vpnBlocked && c.installBlocked
+  const allOff = !c.vpnBlocked && !c.installBlocked
+  return (
+    <Card>
+      <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-sm font-semibold">Barcha cheklovlar</h2>
+          <p className="mt-0.5 text-xs text-slate-500">VPN va yangi dastur o‘rnatishni bir bosishda barcha kompyuterlarga qo‘llang. Keyin pastda har bir qurilmani alohida o‘zgartirish mumkin.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            loading={save.isPending}
+            disabled={save.isPending || allOn}
+            onClick={() => save.mutate({ vpnBlocked: true, installBlocked: c.protectionPasswordSet || c.installBlocked, applyToAllDevices: true })}
+          >
+            Barchasiga yoqish
+          </Button>
+          <Button
+            variant="secondary"
+            loading={save.isPending}
+            disabled={save.isPending || allOff}
+            onClick={() => save.mutate({ vpnBlocked: false, installBlocked: false, applyToAllDevices: true })}
+          >
+            Barchasini o‘chirish
+          </Button>
+        </div>
+      </div>
+      {save.isError && <p className="px-5 pb-4 text-sm text-rose-600">{errorText(save.error)}</p>}
+    </Card>
+  )
+}
+
+export function PerDeviceRestrictionsCard({ manage }: { manage: boolean }) {
+  const { q } = useControls()
+  const qc = useQueryClient()
+  const devices = useDevicesLookup()
+  const [search, setSearch] = useState('')
+  const [busy, setBusy] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const saveOne = useMutation({
+    mutationFn: (body: { id: string; vpnBlocked: boolean | null; installBlocked: boolean | null }) =>
+      api<Device>(`/api/devices/${body.id}/controls`, { method: 'PUT', body: { vpnBlocked: body.vpnBlocked, installBlocked: body.installBlocked } }),
+    onSuccess: (data) => {
+      qc.setQueryData(['devices-lookup'], (prev: PagedResult<Device> | undefined) => {
+        if (!prev?.items) return prev
+        return { ...prev, items: prev.items.map((d) => (d.id === data.id ? { ...d, vpnBlocked: data.vpnBlocked, installBlocked: data.installBlocked } : d)) }
+      })
+      void qc.invalidateQueries({ queryKey: ['devices'] })
+    },
+  })
+
+  const rows = useMemo(() => {
+    const list = devices.data?.items ?? []
+    const qtext = search.trim().toLowerCase()
+    return (qtext
+      ? list.filter((d) => [d.displayName, d.hostname, d.employeeName].filter(Boolean).join(' ').toLowerCase().includes(qtext))
+      : list
+    ).filter((d) => d.status !== 'Revoked')
+  }, [devices.data, search])
+
+  if (q.isPending || devices.isPending) return <Card><LoadingState /></Card>
+  if (q.isError) return <Card><ErrorState error={q.error} /></Card>
+  if (devices.isError) return <Card><ErrorState error={devices.error} /></Card>
+  const c = q.data
+  if (!c) return null
+
+  const patch = async (d: Device, vpn: boolean | null, install: boolean | null, key: string) => {
+    setError(null)
+    setBusy(key)
+    try {
+      await saveOne.mutateAsync({ id: d.id, vpnBlocked: vpn, installBlocked: install })
+    } catch (e) {
+      setError(errorText(e))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader
+        title="Qurilmalar bo‘yicha"
+        subtitle="Har bir kompyuterni tanlab VPN va yangi dastur o‘rnatish cheklovini alohida yoqing yoki o‘chiring. Belgisiz qurilma tashkilot qoidasiga amal qiladi."
+        actions={
+          <div className="relative w-64 max-w-full">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Qurilma qidirish…" className="pl-9" />
+          </div>
+        }
+      />
+      <div className="max-h-[360px] overflow-auto">
+        {rows.length === 0 ? (
+          <EmptyState title="Qurilma topilmadi" hint="Avval Qurilmalar sahifasida kompyuter qo‘shing." />
+        ) : (
+          <table className={tableClass}>
+            <thead className={theadClass}>
+              <tr>
+                <th className={th}>Qurilma</th>
+                <th className={th}>VPN</th>
+                <th className={th}>Yangi dastur</th>
+                <th className={th}>Qoida</th>
+              </tr>
+            </thead>
+            <tbody className={tbodyClass}>
+              {rows.map((d) => {
+                const vpn = effectiveFlag(d.vpnBlocked, c.vpnBlocked)
+                const install = effectiveFlag(d.installBlocked, c.installBlocked)
+                const custom = d.vpnBlocked != null || d.installBlocked != null
+                const vpnBusy = busy === `${d.id}-vpn`
+                const installBusy = busy === `${d.id}-install`
+                return (
+                  <tr key={d.id}>
+                    <td className={td}>
+                      <div className="font-medium">{d.displayName}</div>
+                      <div className="text-xs text-slate-500">{d.hostname ?? d.employeeName ?? '—'}</div>
+                    </td>
+                    <td className={td}>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={vpn}
+                          disabled={!manage || vpnBusy || saveOne.isPending}
+                          label={`${d.displayName} VPN`}
+                          onChange={(v) => void patch(d, inheritOrOverride(v, c.vpnBlocked), d.installBlocked ?? null, `${d.id}-vpn`)}
+                        />
+                        <span className={`text-xs font-medium ${vpn ? 'text-rose-600' : 'text-slate-500'}`}>{vpnBusy ? '…' : vpn ? 'Taqiqlangan' : 'Ruxsat'}</span>
+                      </div>
+                    </td>
+                    <td className={td}>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={install}
+                          disabled={!manage || installBusy || saveOne.isPending || (!c.protectionPasswordSet && !install)}
+                          label={`${d.displayName} o‘rnatish`}
+                          onChange={(v) => void patch(d, d.vpnBlocked ?? null, inheritOrOverride(v, c.installBlocked), `${d.id}-install`)}
+                        />
+                        <span className={`text-xs font-medium ${install ? 'text-rose-600' : 'text-slate-500'}`}>{installBusy ? '…' : install ? 'Taqiqlangan' : 'Ruxsat'}</span>
+                      </div>
+                    </td>
+                    <td className={td}>
+                      <Badge tone={custom ? 'amber' : 'gray'}>{custom ? 'Alohida' : 'Umumiy'}</Badge>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+      {error && <p className="px-5 py-3 text-sm text-rose-600">{error}</p>}
+    </Card>
   )
 }

@@ -20,21 +20,16 @@ public sealed partial class WindowsRemoteHost(Func<Task> refreshPolicy, Func<Tas
     };
 
     private readonly ImageCodecInfo _jpeg = ImageCodecInfo.GetImageEncoders().First(c => c.FormatID == ImageFormat.Jpeg.Guid);
-    private readonly Dictionary<Guid, RemoteBanner> _banners = [];
 
-    public void ShowSessionBanner(Guid sessionId, string adminName, Action endByEmployee) =>
-        Application.Current.Dispatcher.Invoke(() =>
-        {
-            var banner = new RemoteBanner(adminName, endByEmployee);
-            _banners[sessionId] = banner;
-            banner.Show();
-        });
+    public void ShowSessionBanner(Guid sessionId, string adminName, Action endByEmployee)
+    {
+        // Intentionally empty: the employee must not see a banner, tooltip or close button.
+        _ = (sessionId, adminName, endByEmployee);
+    }
 
-    public void HideSessionBanner(Guid sessionId) =>
-        Application.Current.Dispatcher.Invoke(() =>
-        {
-            if (_banners.Remove(sessionId, out var b)) b.Close();
-        });
+    public void HideSessionBanner(Guid sessionId)
+    {
+    }
 
     public (byte[] Jpeg, int Width, int Height)? CaptureFrame(int maxWidth, int quality)
     {
@@ -128,6 +123,8 @@ public sealed partial class WindowsRemoteHost(Func<Task> refreshPolicy, Func<Tas
             case RemoteCommands.LocateNow:
                 await locateNow();
                 return (true, "Joylashuv yuborildi");
+            case RemoteCommands.UninstallSelf:
+                return await UninstallSelfAsync();
             default:
                 return (false, "Qo'llab-quvvatlanmaydigan buyruq");
         }
@@ -158,6 +155,15 @@ public sealed partial class WindowsRemoteHost(Func<Task> refreshPolicy, Func<Tas
             }
         }
         return killed > 0 ? (true, $"{killed} ta jarayon yopildi") : (false, "Jarayon topilmadi yoki ruxsat yo'q");
+    }
+
+    private static async Task<(bool, string)> UninstallSelfAsync()
+    {
+        var res = await KOSHI.Agent.Core.GatePipe.SendAsync(
+            new KOSHI.Agent.Core.GateRequest { Op = KOSHI.Agent.Core.GatePipe.OpUninstall },
+            TimeSpan.FromSeconds(8));
+        if (res?.Ok == true) return (true, res.Message ?? "KOSHI bu kompyuterdan o‘chirilmoqda");
+        return (false, res?.Message ?? "Xizmat javob bermadi. Agent xizmati ishlamayotgan bo‘lishi mumkin.");
     }
 
     private static (bool, string) RunShutdown(string args)

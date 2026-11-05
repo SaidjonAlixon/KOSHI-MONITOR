@@ -67,20 +67,33 @@ public sealed class AgentUpdateWorker(ILogger<AgentUpdateWorker> logger) : Backg
 
         logger.LogInformation("New agent version {Latest} available (current {Current}); downloading", latest, current);
         UpgradeGate.Enter(TimeSpan.FromMinutes(15));
+        SelfHeal.BeginUpgrade();
         AgentSelfUpdate.ReleaseStale(release.Version);
-        var temp = AgentSelfUpdate.NewTempPath(release.Version);
-        await AgentSelfUpdate.DownloadAsync(http, temp, release.FileName, release.Size, progress: null, ct);
+        string? temp = null;
+        try
+        {
+            temp = await AgentSelfUpdate.DownloadToTempAsync(http, release.Version, release.FileName, release.Size, progress: null, ct);
+        }
+        catch (IOException ex)
+        {
+            logger.LogWarning(ex, "Update download locked; will retry next cycle");
+            AgentSelfUpdate.ReleaseStale(release.Version);
+            _attemptedVersion = null;
+            return;
+        }
 
         if (!await AgentSelfUpdate.ShaMatchesAsync(temp, release.Sha256, ct))
         {
             logger.LogError("Downloaded installer hash mismatch; discarding {Path}", temp);
             try { File.Delete(temp); } catch (IOException) { }
+            _attemptedVersion = null;
             return;
         }
 
         logger.LogInformation("Installing agent update {Version} silently", release.Version);
         UpgradeGate.Enter(TimeSpan.FromMinutes(15));
-        AgentSelfUpdate.Launch(temp);
+        SelfHeal.BeginUpgrade();
+        AgentSelfUpdate.Launch(temp, alreadyElevated: true);
     }
 }
 

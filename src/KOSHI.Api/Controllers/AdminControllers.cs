@@ -58,6 +58,14 @@ public sealed class UsersController(UserService users, RoleService roles) : Cont
     [Authorize(Policy = Permissions.UsersManage)]
     public async Task<ActionResult<UserDto>> Update(Guid id, UpdateUserRequest request, CancellationToken ct) => Ok(await users.UpdateAsync(id, request, ct));
 
+    [HttpDelete("users/{id:guid}")]
+    [Authorize(Policy = Permissions.UsersManage)]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        await users.DeleteAsync(id, ct);
+        return NoContent();
+    }
+
     [HttpGet("roles")]
     [Authorize(Policy = Permissions.UsersManage)]
     public async Task<ActionResult<IReadOnlyList<RoleDto>>> Roles(CancellationToken ct) => Ok(await roles.ListAsync(ct));
@@ -94,6 +102,14 @@ public sealed class OrganizationController(OrganizationService org) : Controller
     [HttpPost("departments")]
     [Authorize(Policy = Permissions.EmployeesManage)]
     public async Task<ActionResult<DepartmentDto>> CreateDepartment(UpsertDepartmentRequest r, CancellationToken ct) => StatusCode(201, await org.CreateDepartmentAsync(r, ct));
+
+    [HttpDelete("departments/{id:guid}")]
+    [Authorize(Policy = Permissions.EmployeesManage)]
+    public async Task<IActionResult> DeleteDepartment(Guid id, CancellationToken ct)
+    {
+        await org.DeleteDepartmentAsync(id, ct);
+        return NoContent();
+    }
 
     [HttpGet("schedules")]
     [Authorize(Policy = Permissions.DashboardRead)]

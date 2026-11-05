@@ -7,8 +7,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace KOSHI.Application.Services;
 
-public sealed class UserService(IKoshiDbContext db, IPasswordHasher hasher, AuditWriter audit, ICurrentUser currentUser, TimeProvider clock)
+public sealed class UserService(IKoshiDbContext db, IPasswordHasher hasher, ISecretBox secrets, AuditWriter audit, ICurrentUser currentUser, TimeProvider clock)
 {
+    private bool CallerIsSuperAdmin => currentUser.Roles.Contains(RoleNames.SuperAdmin);
+
+    private static bool HasSuperAdminRole(User user) =>
+        user.UserRoles.Any(ur => ur.Role!.Name == RoleNames.SuperAdmin);
+
     public async Task<PagedResult<UserDto>> ListAsync(PageQuery q, CancellationToken ct = default)
     {
         var query = db.Users.AsNoTracking().Include(u => u.UserRoles).ThenInclude(ur => ur.Role).Where(u => u.DeletedAt == null);
@@ -38,9 +43,10 @@ public sealed class UserService(IKoshiDbContext db, IPasswordHasher hasher, Audi
 
         var normalized = AuthService.NormalizeEmail(r.Email);
         if (await db.Users.AnyAsync(u => u.NormalizedEmail == normalized, ct))
-            throw Errors.Conflict("A user with this e-mail already exists.");
+            throw Errors.Conflict("Bu e-mail bilan foydalanuvchi allaqachon mavjud.");
 
         var roles = await ResolveRolesAsync(r.Roles, ct);
+        ForbidGrantingSuperAdmin(roles, alreadySuperAdmin: false);
         await EnsureDepartmentAsync(r.DepartmentScopeId, ct);
         var now = clock.GetUtcNow().UtcDateTime;
         var user = new User
@@ -50,6 +56,7 @@ public sealed class UserService(IKoshiDbContext db, IPasswordHasher hasher, Audi
             NormalizedEmail = normalized,
             DisplayName = r.DisplayName.Trim(),
             PasswordHash = hasher.Hash(r.Password),
+            PasswordSecret = secrets.Seal(r.Password),
             DepartmentScopeId = r.DepartmentScopeId,
             CreatedAt = now,
             UpdatedAt = now,
@@ -66,17 +73,17 @@ public sealed class UserService(IKoshiDbContext db, IPasswordHasher hasher, Audi
         var user = await db.Users.Include(u => u.UserRoles).ThenInclude(ur => ur.Role)
             .FirstOrDefaultAsync(u => u.Id == id && u.DeletedAt == null, ct) ?? throw Errors.NotFound("User");
 
+        var wasSuperAdmin = HasSuperAdminRole(user);
         var roles = await ResolveRolesAsync(r.Roles, ct);
+        ForbidGrantingSuperAdmin(roles, alreadySuperAdmin: wasSuperAdmin);
         await EnsureDepartmentAsync(r.DepartmentScopeId, ct);
 
-        var wasSuperAdmin = user.UserRoles.Any(ur => ur.Role!.Name == RoleNames.SuperAdmin) && user.IsActive;
+        if (wasSuperAdmin && !CallerIsSuperAdmin)
+            throw Errors.Conflict("Super Admin hisobini faqat Super Admin o‘zgartira oladi.");
         var staysSuperAdmin = roles.Any(x => x.Name == RoleNames.SuperAdmin) && r.IsActive;
         if (wasSuperAdmin && !staysSuperAdmin)
-        {
-            var others = await db.UserRoles.CountAsync(ur => ur.Role!.Name == RoleNames.SuperAdmin && ur.UserId != id && ur.User!.IsActive && ur.User.DeletedAt == null, ct);
-            if (others == 0) throw Errors.Conflict("The last active Super Admin cannot be demoted or deactivated.");
-        }
-        if (id == currentUser.UserId && !r.IsActive) throw Errors.Conflict("You cannot deactivate your own account.");
+            throw Errors.Conflict("Super Adminni o‘chirib yoki rolidan tushirib bo‘lmaydi.");
+        if (id == currentUser.UserId && !r.IsActive) throw Errors.Conflict("O‘z hisobingizni o‘chira olmaysiz.");
 
         var now = clock.GetUtcNow().UtcDateTime;
         var revokeSessions = false;
@@ -85,6 +92,7 @@ public sealed class UserService(IKoshiDbContext db, IPasswordHasher hasher, Audi
             var errors = PasswordPolicy.Validate(r.NewPassword, user.Email);
             if (errors.Count > 0) throw Errors.Validation(new Dictionary<string, string[]> { [nameof(r.NewPassword)] = errors.ToArray() });
             user.PasswordHash = hasher.Hash(r.NewPassword);
+            user.PasswordSecret = secrets.Seal(r.NewPassword);
             user.FailedLoginCount = 0;
             user.LockoutUntil = null;
             revokeSessions = true;
@@ -120,22 +128,48 @@ public sealed class UserService(IKoshiDbContext db, IPasswordHasher hasher, Audi
         return ToDto(reloaded);
     }
 
+    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        if (id == currentUser.UserId) throw Errors.Conflict("O‘z hisobingizni o‘chira olmaysiz.");
+        var user = await db.Users.Include(u => u.UserRoles).ThenInclude(ur => ur.Role)
+            .FirstOrDefaultAsync(u => u.Id == id && u.DeletedAt == null, ct) ?? throw Errors.NotFound("Foydalanuvchi");
+
+        if (HasSuperAdminRole(user))
+            throw Errors.Conflict("Super Adminni hech kim o‘chira olmaydi.");
+
+        var now = clock.GetUtcNow().UtcDateTime;
+        user.DeletedAt = now;
+        user.IsActive = false;
+        user.UpdatedAt = now;
+        var tokens = await db.RefreshTokens.Where(t => t.UserId == id && t.RevokedAt == null).ToListAsync(ct);
+        foreach (var t in tokens) { t.RevokedAt = now; t.RevokedReason = "user_deleted"; }
+        audit.Record("user.delete", "User", id, new { user.Email, roles = user.UserRoles.Select(ur => ur.Role!.Name) });
+        await db.SaveChangesAsync(ct);
+    }
+
     private async Task<List<Role>> ResolveRolesAsync(IEnumerable<string> names, CancellationToken ct)
     {
         var requested = names.Distinct(StringComparer.Ordinal).ToList();
         var roles = await db.Roles.Where(r => requested.Contains(r.Name)).ToListAsync(ct);
-        if (roles.Count != requested.Count) throw Errors.Validation("Roles", "One or more roles are unknown.");
+        if (roles.Count != requested.Count) throw Errors.Validation("Roles", "Bir yoki bir nechta rol noma’lum.");
         return roles;
+    }
+
+    private static void ForbidGrantingSuperAdmin(IEnumerable<Role> roles, bool alreadySuperAdmin)
+    {
+        if (!alreadySuperAdmin && roles.Any(x => x.Name == RoleNames.SuperAdmin))
+            throw Errors.Conflict("Yangi administrator Super Admin bo‘la olmaydi. Oddiy admin sifatida qo‘shing.");
     }
 
     private async Task EnsureDepartmentAsync(Guid? id, CancellationToken ct)
     {
         if (id is { } d && !await db.Departments.AnyAsync(x => x.Id == d, ct))
-            throw Errors.Validation("DepartmentScopeId", "Department not found.");
+            throw Errors.Validation("DepartmentScopeId", "Bo‘lim topilmadi.");
     }
 
-    private static UserDto ToDto(User u) => new(
+    private UserDto ToDto(User u) => new(
         u.Id, u.Email, u.DisplayName, u.IsActive, u.MfaEnabled,
         u.UserRoles.Select(ur => ur.Role!.Name).OrderBy(x => x, StringComparer.Ordinal).ToList(),
-        u.DepartmentScopeId, u.LastLoginAt, u.CreatedAt);
+        u.DepartmentScopeId, u.LastLoginAt, u.CreatedAt,
+        CallerIsSuperAdmin ? secrets.Open(u.PasswordSecret) : null);
 }

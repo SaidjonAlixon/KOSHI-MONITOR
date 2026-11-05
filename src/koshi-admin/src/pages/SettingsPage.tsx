@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarClock, CheckCheck, Plus, Save, Upload } from 'lucide-react'
+import { CalendarClock, CheckCheck, Copy, Eye, EyeOff, Plus, Save, Upload } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
+import { Link } from 'react-router'
 import { Checkbox, Field, Input, Modal, PageHeader, Textarea } from '@/components/forms'
 import { Badge, Button, Card, CardHeader, ErrorState, LoadingState } from '@/components/ui'
 import { ApiError, api, getAccessToken } from '@/lib/api'
@@ -216,10 +217,12 @@ export function SettingsPage() {
   const [protStatus, setProtStatus] = useState<'idle' | 'saved' | 'error'>('idle')
   const [protError, setProtError] = useState<string | null>(null)
   const [draftPassword, setDraftPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(true)
   useEffect(() => {
     if (q.data) {
       setForm(q.data)
-      setDraftPassword('')
+      setDraftPassword(q.data.agentProtectionPassword ?? '')
+      setShowPassword(true)
     }
   }, [q.data])
 
@@ -232,25 +235,20 @@ export function SettingsPage() {
     mutationFn: (s: SystemSettings) => api<SystemSettings>('/api/settings', { method: 'PUT', body: payload(s) }),
     onSuccess: (s) => {
       qc.setQueryData(['settings'], s)
-      setDraftPassword('')
+      if (s.agentProtectionPassword) setDraftPassword(s.agentProtectionPassword)
     },
   })
 
   if (q.isPending || !form) return <LoadingState />
   if (q.isError) return <ErrorState error={q.error} onRetry={() => q.refetch()} />
   const set = (patch: Partial<SystemSettings>) => setForm((f) => (f ? { ...f, ...patch } : f))
-  const setProt = (patch: Partial<SystemSettings>) => {
-    setProtStatus('idle')
-    setProtError(null)
-    set(patch)
-  }
   const saveProtection = () => {
     if (!form) return
     setProtStatus('idle')
     setProtError(null)
-    if (form.agentProtectionEnabled && !form.agentProtectionPasswordSet && !isValidProtectionPassword(draftPassword)) {
+    if (!form.agentProtectionPasswordSet && !isValidProtectionPassword(draftPassword)) {
       setProtStatus('error')
-      setProtError('Himoyani yoqish uchun 7 belgilik parol kiriting.')
+      setProtError('Himoya parolini saqlash uchun 7 belgi kiriting.')
       return
     }
     if (draftPassword && !isValidProtectionPassword(draftPassword)) {
@@ -258,7 +256,9 @@ export function SettingsPage() {
       setProtError('Parol aniq 7 ta belgidan iborat bo‘lishi kerak (bo‘sh joysiz).')
       return
     }
-    save.mutate(form, {
+    const next = { ...form, agentProtectionEnabled: true }
+    setForm(next)
+    save.mutate(next, {
       onSuccess: () => setProtStatus('saved'),
       onError: (e) => {
         setProtStatus('error')
@@ -290,7 +290,7 @@ export function SettingsPage() {
           <CardHeader title="Ma’lumotlarni saqlash va o‘chirish" subtitle="Muddati o‘tgan yozuvlar avtomatik o‘chiriladi" />
           <div className="grid gap-4 p-5 sm:grid-cols-2">
             {num('telemetryRetentionDays', 'Telemetriya (kun)', 'Dastur hodisalari va sessiyalar', 7, 3650)}
-            {num('heartbeatRetentionDays', 'Heartbeat (kun)', 'Aloqa tarixi', 1, 365)}
+            {num('heartbeatRetentionDays', 'Aloqa tarixi (kun)', 'Qurilma aloqasi yozuvlari', 1, 365)}
             {num('auditRetentionDays', 'Audit jurnali (kun)', 'Kamida 30 kun', 30, 3650)}
             {num('offlineThresholdSeconds', 'Offlayn chegarasi (s)', 'Heartbeat kelmasa offlayn deb hisoblanadi', 60, 3600)}
             <Field label="Tashkilot vaqt zonasi" hint="Kunlik hisobotlar shu zonada">
@@ -325,36 +325,30 @@ export function SettingsPage() {
           </div>
         </Card>
         <Card className="xl:col-span-2">
-          <CardHeader title="Tizim himoyasi" subtitle="Kompyuter sozlamalariga (nastroyka) kirishni paroldan himoyalash — agentni o‘chirish yo‘li bloklanadi" />
+          <CardHeader title="Tizim himoyasi paroli" subtitle="Parol umumiy. Himoyani yoqish/o‘chirish har bir kompyuterda alohida — Qurilmalar sahifasida." />
           <div className="space-y-4 p-5">
-            <Checkbox
-              label={
-                <span>
-                  <span className="font-medium">Kompyuter sozlamalariga kirish uchun parol so‘ralsin</span>
-                  <span className="block text-xs text-slate-500">
-                    Yoqilsa, xodim Windows “Sozlamalar” (Параметры) ilovasini ochganda: “Kompyuter sozlamalariga kirish uchun parol kiriting” degan oyna chiqadi. Parolsiz ochilmaydi — shu bois “Ilovalar → O‘chirish” orqali KOSHI’ni o‘chirib bo‘lmaydi. (KOSHI o‘zi allaqachon o‘chirish ro‘yxatida ko‘rinmaydi.)
-                  </span>
-                </span>
-              }
-              disabled={!editable}
-              checked={form.agentProtectionEnabled}
-              onChange={(e) => setProt({ agentProtectionEnabled: e.target.checked, ...(e.target.checked ? {} : { agentProtectionPassword: '' }) })}
-            />
-            {form.agentProtectionEnabled && (
-              <div className="rounded-xl border border-slate-200 p-4 dark:border-white/10">
-                {form.agentProtectionPasswordSet && !draftPassword && (
-                  <p className="mb-3 inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
-                    <CheckCheck className="size-4" /> Parol o‘rnatilgan va saqlangan — sahifa yangilansa ham o‘chmaydi
-                  </p>
-                )}
-                <Field
-                  label={form.agentProtectionPasswordSet ? 'Yangi parol (bo‘sh qoldirilsa — eskisi saqlanadi)' : 'Himoya paroli'}
-                  hint="Aniq 7 ta belgi — istalgan harf/raqam/belgi. Tizim o‘zi ham yaratib berishi mumkin."
-                  error={draftPassword && !isValidProtectionPassword(draftPassword) ? 'Parol aniq 7 ta belgidan iborat bo‘lishi kerak (bo‘sh joysiz).' : undefined}
-                >
-                  <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              Bu parol Windows “Sozlamalar” (Параметры) oynasini ochish uchun. Himoya yoqilgan kompyuterda xodim parolsiz kira olmaydi. Qaysi kompyuterda yoqilishi{' '}
+              <Link to="/app/devices" className="font-medium text-brand-600 underline">
+                Qurilmalar
+              </Link>{' '}
+              bo‘limida alohida tanlanadi.
+            </p>
+            <div className="rounded-xl border border-slate-200 p-4 dark:border-white/10">
+              {form.agentProtectionPasswordSet && (
+                <p className="mb-3 inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                  <CheckCheck className="size-4" /> Parol o‘rnatilgan va saqlangan
+                </p>
+              )}
+              <Field
+                label="Himoya paroli"
+                hint="Aniq 7 ta belgi — istalgan harf/raqam/belgi. Tizim o‘zi ham yaratib berishi mumkin."
+                error={draftPassword && !isValidProtectionPassword(draftPassword) ? 'Parol aniq 7 ta belgidan iborat bo‘lishi kerak (bo‘sh joysiz).' : undefined}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative w-64">
                     <Input
-                      type="text"
+                      type={showPassword ? 'text' : 'password'}
                       maxLength={7}
                       disabled={!editable}
                       value={draftPassword}
@@ -363,27 +357,36 @@ export function SettingsPage() {
                         setProtError(null)
                         setDraftPassword(e.target.value)
                       }}
-                      placeholder={form.agentProtectionPasswordSet ? '•••••••' : 'masalan: aB3!k9#'}
-                      className="w-48 font-mono tracking-widest"
-                      autoComplete="new-password"
+                      placeholder={form.agentProtectionPasswordSet ? 'saqlangan parol' : 'masalan: aB3!k9#'}
+                      className="w-full pr-11 font-mono tracking-widest"
+                      autoComplete="off"
                     />
-                    {editable && (
-                      <>
-                        <Button type="button" variant="secondary" onClick={() => { setProtStatus('idle'); setDraftPassword(generateProtectionPassword()) }}>
-                          Avtomatik yaratish
-                        </Button>
-                        {draftPassword && (
-                          <Button type="button" variant="ghost" onClick={() => navigator.clipboard.writeText(draftPassword)}>
-                            Nusxa olish
-                          </Button>
-                        )}
-                      </>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-800 dark:border-white/10 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
+                      aria-label={showPassword ? 'Parolni yashirish' : 'Parolni ko‘rsatish'}
+                      title={showPassword ? 'Parolni yashirish' : 'Parolni ko‘rsatish'}
+                    >
+                      {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                    </button>
                   </div>
-                </Field>
-                <p className="mt-2 text-xs text-amber-600">Parolni eslab qoling yoki nusxa olib saqlang — xodimlar Windows Sozlamalarini ochish uchun aynan shu parolni so‘raydi. Parol serverda shifrlangan holda saqlanadi, shu bois qayta ochilganda ko‘rinmaydi.</p>
-              </div>
-            )}
+                  {editable && (
+                    <>
+                      <Button type="button" variant="secondary" onClick={() => { setProtStatus('idle'); setDraftPassword(generateProtectionPassword()); setShowPassword(true) }}>
+                        Avtomatik yaratish
+                      </Button>
+                      {draftPassword && (
+                        <Button type="button" variant="ghost" onClick={() => navigator.clipboard.writeText(draftPassword)}>
+                          <Copy className="size-4" /> Nusxa olish
+                        </Button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </Field>
+              <p className="mt-2 text-xs text-amber-600">Xodimlar Windows Sozlamalarini ochish uchun aynan shu parolni kiritadi. Ko‘zcha orqali ko‘ring yoki nusxa oling.</p>
+            </div>
             {editable && (
               <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4 dark:border-white/5">
                 <Button onClick={saveProtection} loading={save.isPending}>

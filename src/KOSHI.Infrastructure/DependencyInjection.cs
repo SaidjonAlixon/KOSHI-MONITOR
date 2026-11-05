@@ -27,6 +27,7 @@ public static class DependencyInjection
         jwt.CreateKey();
         services.AddSingleton(jwt);
         services.AddSingleton<IAccessTokenIssuer, JwtAccessTokenIssuer>();
+        services.AddSingleton<ISecretBox, AesSecretBox>();
 
         var iterations = config.GetValue("Security:PasswordHashIterations", Pbkdf2PasswordHasher.DefaultIterations);
         services.AddSingleton<IPasswordHasher>(new Pbkdf2PasswordHasher(iterations));

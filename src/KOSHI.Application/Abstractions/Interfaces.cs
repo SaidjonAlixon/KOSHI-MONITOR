@@ -72,3 +72,10 @@ public interface IDbErrorClassifier
 {
     bool IsUniqueViolation(Exception exception);
 }
+
+/// <summary>Reversible encryption for admin-visible secrets (e.g. the 7-character protection PIN).</summary>
+public interface ISecretBox
+{
+    string Seal(string plaintext);
+    string? Open(string? sealedValue);
+}

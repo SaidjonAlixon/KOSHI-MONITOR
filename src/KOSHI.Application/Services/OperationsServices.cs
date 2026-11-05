@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using KOSHI.Application.Abstractions;
 using KOSHI.Application.Common;
 using KOSHI.Contracts;
@@ -61,7 +62,19 @@ public sealed class AlertService(IKoshiDbContext db, AuditWriter audit, ICurrent
         return ToDto(alert);
     }
 
-    private static AlertDto ToDto(Alert a) => new(a.Id, a.DeviceId, a.Device?.DisplayName, a.Type.ToString(), a.Severity.ToString(), a.Message, a.CreatedAt, a.AcknowledgedAt, a.ResolvedAt);
+    private static AlertDto ToDto(Alert a) => new(a.Id, a.DeviceId, a.Device?.DisplayName, a.Type.ToString(), a.Severity.ToString(), LocalizeMessage(a.Message), a.CreatedAt, a.AcknowledgedAt, a.ResolvedAt);
+
+    private static readonly Regex Restricted = new(@"^Restricted application '([^']+)' was detected on (.+?)\.?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex Heartbeat = new(@"^(.+) has not sent a heartbeat since (.+?)(?: UTC)?\.?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static string LocalizeMessage(string message)
+    {
+        var r = Restricted.Match(message);
+        if (r.Success) return $"«{r.Groups[1].Value}» dasturi {r.Groups[2].Value} kompyuterida taqiqqa qaramay ochildi.";
+        var h = Heartbeat.Match(message);
+        if (h.Success) return $"{h.Groups[1].Value} kompyuteri {h.Groups[2].Value} dan beri aloqa yubormadi — oflayn bo‘lishi mumkin.";
+        return message;
+    }
 }
 
 public sealed class OrganizationService(IKoshiDbContext db, AuditWriter audit, ICurrentUser currentUser, TimeProvider clock)
@@ -149,6 +162,19 @@ public sealed class OrganizationService(IKoshiDbContext db, AuditWriter audit, I
         audit.Record("department.create", "Department", d.Id, new { d.Name, d.Branch });
         await db.SaveChangesAsync(ct);
         return new DepartmentDto(d.Id, d.Name, d.Branch, 0, false);
+    }
+
+    public async Task DeleteDepartmentAsync(Guid id, CancellationToken ct = default)
+    {
+        var d = await db.Departments.FirstOrDefaultAsync(x => x.Id == id, ct) ?? throw Errors.NotFound("Bo‘lim");
+        var active = await db.Employees.CountAsync(e => e.DepartmentId == id && e.DeletedAt == null, ct);
+        if (active > 0) throw Errors.Conflict($"Bu bo‘limda {active} ta xodim bor. Avval ularni boshqa bo‘limga o‘tkazing yoki arxivlang, so‘ng o‘chiring.");
+        // Detach any archived employees so the foreign key stays valid.
+        var archived = await db.Employees.Where(e => e.DepartmentId == id).ToListAsync(ct);
+        foreach (var e in archived) e.DepartmentId = null;
+        db.Departments.Remove(d);
+        audit.Record("department.delete", "Department", id, new { d.Name, d.Branch });
+        await db.SaveChangesAsync(ct);
     }
 
     public async Task<IReadOnlyList<WorkScheduleDto>> SchedulesAsync(CancellationToken ct = default) =>

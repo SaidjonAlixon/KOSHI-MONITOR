@@ -29,4 +29,9 @@ public sealed class MonitoringController(MonitoringService monitoring) : Control
     [Authorize(Policy = Permissions.ReportsRead)]
     public async Task<ActionResult<IdleSummaryDto>> IdleSummary([FromQuery] MonitoringQuery q, CancellationToken ct) =>
         Ok(await monitoring.IdleSummaryAsync(q, ct));
+
+    [HttpGet("activity-detail")]
+    [Authorize(Policy = Permissions.MonitoringRead)]
+    public async Task<ActionResult<ActivityDetailDto>> ActivityDetail([FromQuery] MonitoringQuery q, CancellationToken ct) =>
+        Ok(await monitoring.ActivityDetailAsync(q, ct));
 }

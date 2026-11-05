@@ -22,6 +22,7 @@ public sealed record AuthResult(LoginResponse Response, IssuedRefreshToken Refre
 public sealed class AuthService(
     IKoshiDbContext db,
     IPasswordHasher hasher,
+    ISecretBox secrets,
     IAccessTokenIssuer tokens,
     AuditWriter audit,
     TimeProvider clock,
@@ -72,6 +73,7 @@ public sealed class AuthService(
         }
 
         if (needsRehash) user.PasswordHash = hasher.Hash(request.Password);
+        user.PasswordSecret = secrets.Seal(request.Password);
         user.FailedLoginCount = 0;
         user.LockoutUntil = null;
         user.LastLoginAt = now;
@@ -106,7 +108,7 @@ public sealed class AuthService(
             db.Alerts.Add(new Alert
             {
                 Id = Guid.NewGuid(), Type = AlertType.Security, Severity = AlertSeverity.Critical, CreatedAt = now,
-                Message = "Refresh token reuse detected; all sessions of the account were revoked.",
+                Message = "Kirish tokeni qayta ishlatilgani aniqlandi; xavfsizlik uchun ushbu hisobning barcha sessiyalari bekor qilindi.",
                 DedupKey = $"refresh-reuse:{existing.FamilyId}",
             });
             await db.SaveChangesAsync(ct);

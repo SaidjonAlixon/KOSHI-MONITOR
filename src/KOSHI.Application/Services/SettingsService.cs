@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace KOSHI.Application.Services;
 
-public sealed class SettingsService(IKoshiDbContext db, AuditWriter audit, ICurrentUser currentUser, TimeProvider clock)
+public sealed class SettingsService(IKoshiDbContext db, AuditWriter audit, ICurrentUser currentUser, TimeProvider clock, ISecretBox secrets)
 {
     public static class Keys
     {
@@ -27,6 +27,7 @@ public sealed class SettingsService(IKoshiDbContext db, AuditWriter audit, ICurr
         public const string AgentProtectionEnabled = "agent.protectionEnabled";
         public const string AgentProtectionSalt = "agent.protectionSalt";
         public const string AgentProtectionHash = "agent.protectionHash";
+        public const string AgentProtectionSecret = "agent.protectionSecret";
         public const string AgentLocationEnabled = "agent.locationEnabled";
         public const string AgentVpnBlocked = "agent.vpnBlocked";
         public const string AgentInstallBlocked = "agent.installBlocked";
@@ -38,7 +39,7 @@ public sealed class SettingsService(IKoshiDbContext db, AuditWriter audit, ICurr
         AuditRetentionDays: 365,
         OfflineThresholdSeconds: 120,
         OrganizationTimeZone: "Asia/Tashkent",
-        MonitoringNotice: "Korporativ kompyuter monitoringi faol.",
+        MonitoringNotice: "Aqlli monitoring. Ishonchli nazorat.",
         SupportContact: "",
         ApprovedUsageWeight: 0.5,
         ScheduleAdherenceWeight: 0.3,
@@ -67,7 +68,8 @@ public sealed class SettingsService(IKoshiDbContext db, AuditWriter audit, ICurr
             Bool(map, Keys.AgentAutoUpdate, d.AgentAutoUpdate),
             Bool(map, Keys.AgentProtectionEnabled, d.AgentProtectionEnabled),
             Bool(map, Keys.AgentLocationEnabled, d.AgentLocationEnabled),
-            AgentProtectionPasswordSet: !string.IsNullOrEmpty(map.GetValueOrDefault(Keys.AgentProtectionHash)));
+            AgentProtectionPasswordSet: !string.IsNullOrEmpty(map.GetValueOrDefault(Keys.AgentProtectionHash)),
+            AgentProtectionPassword: secrets.Open(map.GetValueOrDefault(Keys.AgentProtectionSecret)));
     }
 
     /// <summary>Returns the Windows-Settings protection state and password verifier for agents.</summary>
@@ -117,7 +119,17 @@ public sealed class SettingsService(IKoshiDbContext db, AuditWriter audit, ICurr
                 db.SystemSettings.Add(new SystemSetting { Id = Guid.NewGuid(), Key = key, Value = value, UpdatedAt = now, UpdatedByUserId = currentUser.UserId });
             }
         }
-        audit.Record("controls.update", "SystemSettings", null, new { r.VpnBlocked, r.InstallBlocked });
+        if (r.ApplyToAllDevices)
+        {
+            var devices = await db.Devices.Where(d => d.DeletedAt == null).ToListAsync(ct);
+            foreach (var d in devices)
+            {
+                d.VpnBlocked = null;
+                d.InstallBlocked = null;
+                d.UpdatedAt = now;
+            }
+        }
+        audit.Record("controls.update", "SystemSettings", null, new { r.VpnBlocked, r.InstallBlocked, r.ApplyToAllDevices });
         await db.SaveChangesAsync(ct);
         return await GetControlsAsync(ct);
     }
@@ -160,6 +172,7 @@ public sealed class SettingsService(IKoshiDbContext db, AuditWriter audit, ICurr
                 var (salt, hash) = AppLockPassword.Create(r.AgentProtectionPassword);
                 values[Keys.AgentProtectionSalt] = salt;
                 values[Keys.AgentProtectionHash] = hash;
+                values[Keys.AgentProtectionSecret] = secrets.Seal(r.AgentProtectionPassword);
             }
             else if (string.IsNullOrEmpty(existingProtHash))
             {

@@ -50,6 +50,15 @@ public sealed class PoliciesController(PolicyService policies, IHubContext<Agent
         await agents.Clients.All.SendAsync("command", new RemoteCommandDto(Guid.NewGuid(), RemoteCommands.RefreshPolicy, null, "KOSHI"), ct);
         return Ok(dto);
     }
+
+    [HttpDelete("{id:guid}")]
+    [Authorize(Policy = Permissions.PoliciesManage)]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        await policies.DeleteAsync(id, ct);
+        await agents.Clients.All.SendAsync("command", new RemoteCommandDto(Guid.NewGuid(), RemoteCommands.RefreshPolicy, null, "KOSHI"), ct);
+        return NoContent();
+    }
 }
 
 [ApiController]

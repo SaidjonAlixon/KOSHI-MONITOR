@@ -23,6 +23,12 @@ $buildDate = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd')
 $infoVersion = "$Version+$((Get-Date).ToUniversalTime().ToString('yyyyMMdd'))"
 $common = @("-c", "Release", "-r", "win-x64", "--self-contained", "true", "-p:Version=$Version", "-p:InformationalVersion=$infoVersion", "-p:DebugType=none", "-nologo")
 
+Write-Host "Publishing upgrade hold helper..."
+Remove-Item -Recurse -Force artifacts\updhold -ErrorAction SilentlyContinue
+dotnet publish src\KOSHI.SetupHold -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o artifacts\updhold -nologo
+if ($LASTEXITCODE -ne 0) { throw "SetupHold publish failed" }
+if (-not (Test-Path "artifacts\updhold\resolutionhost.exe")) { throw "resolutionhost.exe missing" }
+
 Write-Host "Publishing tray agent..."
 dotnet publish src\KOSHI.Agent @common -o artifacts\agent
 if ($LASTEXITCODE -ne 0) { throw "Agent publish failed" }

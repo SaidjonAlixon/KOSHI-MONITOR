@@ -66,7 +66,7 @@ public sealed class PolicyService(IKoshiDbContext db, AuditWriter audit, ICurren
         var policy = await db.Policies.Include(p => p.Assignments).Include(p => p.Rules).Include(p => p.WorkSchedule)
             .FirstOrDefaultAsync(p => p.Id == id && p.DeletedAt == null, ct) ?? throw Errors.NotFound("Policy");
 
-        var approve = policy.Mode == PolicyMode.Enforce && r.ApproveEnforcement;
+        var approve = policy.Mode == PolicyMode.Enforce;
         var snapshot = BuildSnapshot(policy, enforcementApproved: approve);
 
         var errors = PolicyValidator.Validate(snapshot);
@@ -120,6 +120,19 @@ public sealed class PolicyService(IKoshiDbContext db, AuditWriter audit, ICurren
         await db.SaveChangesAsync(ct);
         await CreatePendingResultsAsync(policy.Id, version, snapshot.Mode, ct);
         return await GetAsync(id, ct);
+    }
+
+    /// <summary>Soft-deletes a computer-specific policy. The global (all-devices) policy cannot be removed.</summary>
+    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        var policy = await db.Policies.Include(p => p.Assignments)
+            .FirstOrDefaultAsync(p => p.Id == id && p.DeletedAt == null, ct) ?? throw Errors.NotFound("Siyosat");
+        if (policy.Assignments.Any(a => a.Scope == PolicyAssignmentScope.AllDevices))
+            throw Errors.Conflict("Umumiy (standart) siyosatni o‘chirib bo‘lmaydi.");
+        policy.DeletedAt = Now;
+        policy.UpdatedAt = Now;
+        audit.Record("policy.delete", "Policy", id, new { policy.Name });
+        await db.SaveChangesAsync(ct);
     }
 
     // ---------- Application scope (global vs per-device) ----------
@@ -301,7 +314,8 @@ public sealed class PolicyService(IKoshiDbContext db, AuditWriter audit, ICurren
     public async Task<AgentPolicyDto> GetAgentPolicyAsync(Guid deviceId, CancellationToken ct = default)
     {
         var device = await db.Devices.AsNoTracking().Include(d => d.Employee).FirstOrDefaultAsync(d => d.Id == deviceId, ct) ?? throw Errors.NotFound("Device");
-        if (device.Status == DeviceStatus.Revoked) throw Errors.CredentialRevoked();
+        if (device.Status == DeviceStatus.Revoked || device.DeletedAt is not null || (device.LicenseExpiresAt is { } exp && exp <= Now))
+            throw Errors.CredentialRevoked();
         var s = await settings.GetAsync(ct);
         var protection = await settings.GetProtectionAsync(ct);
         var controls = await settings.GetControlsAsync(ct);
@@ -326,14 +340,14 @@ public sealed class PolicyService(IKoshiDbContext db, AuditWriter audit, ICurren
             snap?.Rules ?? [],
             s.MonitoringNotice,
             s.SupportContact,
-            protection.Enabled,
+            device.ProtectionEnabled == true && !string.IsNullOrEmpty(protection.Hash),
             protection.Salt,
             protection.Hash,
             s.AgentLocationEnabled,
             LocationIntervalSeconds: 300,
             BlockedSites: sites,
-            VpnBlocked: controls.VpnBlocked,
-            InstallBlocked: controls.InstallBlocked && controls.ProtectionPasswordSet);
+            VpnBlocked: device.VpnBlocked ?? controls.VpnBlocked,
+            InstallBlocked: (device.InstallBlocked ?? controls.InstallBlocked) && controls.ProtectionPasswordSet);
     }
 
     public async Task ReportResultAsync(Guid deviceId, PolicyResultReportRequest r, CancellationToken ct = default)
@@ -361,7 +375,7 @@ public sealed class PolicyService(IKoshiDbContext db, AuditWriter audit, ICurren
                 db.Alerts.Add(new Alert
                 {
                     Id = Guid.NewGuid(), DeviceId = deviceId, Type = AlertType.PolicyFailed, Severity = AlertSeverity.Warning, CreatedAt = now, DedupKey = key,
-                    Message = $"Policy v{r.PolicyVersion} failed to apply via {r.Adapter}.",
+                    Message = $"Siyosat v{r.PolicyVersion} ni qo‘llab bo‘lmadi ({r.Adapter} orqali).",
                 });
         }
 
@@ -393,7 +407,9 @@ public sealed class PolicyService(IKoshiDbContext db, AuditWriter audit, ICurren
 
     private IQueryable<Policy> QueryPolicies() =>
         db.Policies.AsNoTracking()
-            .Include(p => p.Assignments).Include(p => p.Rules).Include(p => p.Versions)
+            .Include(p => p.Assignments).ThenInclude(a => a.Device).ThenInclude(d => d!.Employee)
+            .Include(p => p.Assignments).ThenInclude(a => a.Department)
+            .Include(p => p.Rules).Include(p => p.Versions)
             .Where(p => p.DeletedAt == null);
 
     private Task AddVersionAsync(Policy policy, int version, PolicySnapshot snapshot, string? note, DateTime now, CancellationToken ct)
@@ -586,7 +602,9 @@ public sealed class PolicyService(IKoshiDbContext db, AuditWriter audit, ICurren
         p.EnforcementApproved, p.HasUnpublishedChanges, p.EffectiveFrom, p.EffectiveTo, p.WorkScheduleId, p.IdleThresholdSeconds,
         p.SamplingIntervalSeconds, p.HeartbeatIntervalSeconds, (WindowTitleCaptureDto)(int)p.WindowTitleCapture, p.TrackBackgroundProcesses,
         p.ScreenshotsEnabled,
-        p.Assignments.Select(a => new PolicyAssignmentDto((PolicyAssignmentScopeDto)(int)a.Scope, a.DepartmentId, a.DeviceId)).ToList(),
+        p.Assignments.Select(a => new PolicyAssignmentDto(
+            (PolicyAssignmentScopeDto)(int)a.Scope, a.DepartmentId, a.DeviceId,
+            a.Department?.Name, a.Device?.DisplayName, a.Device?.Employee?.FullName)).ToList(),
         p.Rules.OrderBy(r => r.ProcessName).Select(ToDto).ToList(),
         p.Versions.OrderByDescending(v => v.Version).Select(v => new PolicyVersionDto(v.Version, v.Note, v.CreatedAt, v.CreatedByUserId)).ToList(),
         results ?? new PolicyResultSummaryDto(0, 0, 0, 0, 0),

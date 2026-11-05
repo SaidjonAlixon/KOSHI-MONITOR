@@ -54,10 +54,20 @@ export const LOCATION_SOURCE_LABELS = {
 } as const
 
 export const CLASSIFICATION_LABELS = { Approved: 'Tasdiqlangan', NotApproved: 'Tasdiqlanmagan', Neutral: 'Neytral', Mixed: 'Aralash', Unclassified: 'Tasniflanmagan' } as const
-export const MODE_LABELS = { AuditOnly: 'Audit-only (faqat qayd)', Enforce: 'Enforcement (cheklash)' } as const
-export const CAPTURE_LABELS = { None: 'Saqlanmaydi', Masked: 'Maskalangan', Full: 'To‘liq' } as const
+export const MODE_LABELS = { AuditOnly: 'Faqat kuzatish', Enforce: 'Dasturlarni cheklash' } as const
+export const CAPTURE_LABELS = { None: 'Oyna nomi saqlanmasin', Masked: 'Oyna nomi yashirin', Full: 'Oyna nomi to‘liq' } as const
 export const CONFIDENCE_LABELS = { High: 'Yuqori', Medium: 'O‘rta', Low: 'Past', None: 'Ma’lumot yo‘q' } as const
 export const ALERT_LABELS = { DeviceOffline: 'Aloqa uzildi', PolicyFailed: 'Siyosat xatosi', PolicyViolation: 'Cheklov buzildi', TelemetryGap: 'Telemetriya bo‘shlig‘i', Security: 'Xavfsizlik' } as const
+export const SEVERITY_LABELS = { Info: 'Ma’lumot', Warning: 'Ogohlantirish', Critical: 'Jiddiy' } as const
+
+/** Old English rows in the database are rewritten so the admin always sees Uzbek. */
+export function localizeAlertMessage(message: string): string {
+  const restricted = message.match(/^Restricted application '([^']+)' was detected on (.+?)\.?$/i)
+  if (restricted) return `«${restricted[1]}» dasturi ${restricted[2]} kompyuterida taqiqqa qaramay ochildi.`
+  const heartbeat = message.match(/^(.+) has not sent a heartbeat since (.+?)(?: UTC)?\.?$/i)
+  if (heartbeat) return `${heartbeat[1]} kompyuteri ${heartbeat[2]} dan beri aloqa yubormadi — oflayn bo‘lishi mumkin.`
+  return message
+}
 export const WEEKDAYS = [
   ['Monday', 'Du'],
   ['Tuesday', 'Se'],

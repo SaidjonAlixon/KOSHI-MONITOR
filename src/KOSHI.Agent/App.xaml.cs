@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using KOSHI.Agent.Core;
 using KOSHI.Agent.Core.Windows;
 using KOSHI.Agent.Remote;
@@ -193,7 +193,6 @@ public partial class App : System.Windows.Application
             if (_runtime.AvailableUpdate is { } info) Dispatcher.BeginInvoke(() => ShowUpdatePrompt(info));
             else Dispatcher.BeginInvoke(() => ShowStatus());
         });
-        menu.Items.Add("Monitoring siyosati haqida", null, (_, _) => ShowStatus(StatusWindow.Section.Policy));
         return menu;
     }
 

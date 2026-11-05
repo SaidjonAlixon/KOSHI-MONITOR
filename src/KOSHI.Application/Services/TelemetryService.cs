@@ -41,7 +41,8 @@ public sealed class TelemetryService(
     private async Task<TelemetryBatchResponse> IngestOnceAsync(Guid deviceId, TelemetryBatchRequest batch, CancellationToken ct)
     {
         var device = await db.Devices.Include(d => d.Employee).FirstOrDefaultAsync(d => d.Id == deviceId, ct) ?? throw Errors.NotFound("Device");
-        if (device.Status == DeviceStatus.Revoked) throw Errors.CredentialRevoked();
+        if (device.Status == DeviceStatus.Revoked || device.DeletedAt is not null || (device.LicenseExpiresAt is { } exp && exp <= clock.GetUtcNow().UtcDateTime))
+            throw Errors.CredentialRevoked();
         if (device.Status != DeviceStatus.Active) throw Errors.DeviceBlocked();
 
         var now = clock.GetUtcNow().UtcDateTime;
@@ -171,7 +172,7 @@ public sealed class TelemetryService(
             db.Alerts.Add(new Alert
             {
                 Id = Guid.NewGuid(), DeviceId = device.Id, Type = AlertType.PolicyViolation, Severity = AlertSeverity.Warning,
-                Message = $"Restricted application '{v.ProcessName}' was detected on {device.DisplayName}.", DedupKey = key, CreatedAt = now,
+                Message = $"Taqiqlangan dastur '{v.ProcessName}' {device.DisplayName} kompyuterida ishga tushirildi.", DedupKey = key, CreatedAt = now,
             });
         }
     }

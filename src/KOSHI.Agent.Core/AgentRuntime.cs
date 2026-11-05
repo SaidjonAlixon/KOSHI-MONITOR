@@ -48,7 +48,8 @@ public sealed record AgentStatus(
     string SupportContact,
     bool RemoteChannelConnected,
     bool AutoUpdateEnabled,
-    string? LocationInfo = null);
+    string? LocationInfo = null,
+    DateTime? LicenseExpiresAt = null);
 
 /// <summary>Runs inside the interactive user session: sampling, local queue, upload, heartbeat, policy, app enforcement and real-time chat/remote channel.</summary>
 [SupportedOSPlatform("windows")]
@@ -68,6 +69,7 @@ public sealed class AgentRuntime : IAsyncDisposable
     private readonly ILogger _logger;
     private readonly Dictionary<string, DateTime> _unlockedApps = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _unlockHiddenPolls = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, DateTime> _lockCooldownUntil = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<Guid> _seenMessages = [];
     private readonly List<ChatMessage> _chatHistory = [];
     private DateTime? _chatSince;
@@ -97,7 +99,7 @@ public sealed class AgentRuntime : IAsyncDisposable
         Status = new AgentStatus(AgentState.NotActivated, null, null, false, null, null, 0, null, DefaultNotice, "", false, true);
     }
 
-    public const string DefaultNotice = "Korporativ kompyuter monitoringi faol.";
+    public const string DefaultNotice = "Aqlli monitoring. Ishonchli nazorat.";
 
     public AgentStatus Status { get; private set; }
 
@@ -179,14 +181,20 @@ public sealed class AgentRuntime : IAsyncDisposable
         {
             _config = AgentStore.LoadConfig();
             var credential = AgentStore.LoadCredential();
+            if (_config is { LicenseExpiresAt: { } localExp } && localExp <= DateTime.UtcNow)
+            {
+                AgentStore.TryDelete();
+                _config = null;
+                credential = null;
+            }
             if (_config is null || credential is null)
             {
-                SetStatus(s => s with { State = AgentState.NotActivated, MonitoringActive = false });
+                SetStatus(s => s with { State = AgentState.NotActivated, MonitoringActive = false, LicenseExpiresAt = null, DeviceName = null });
                 await Task.Delay(TimeSpan.FromSeconds(10), ct);
                 continue;
             }
 
-            SetStatus(s => s with { State = AgentState.Connecting, ServerUrl = _config.ServerUrl, DeviceName = _config.DisplayName });
+            SetStatus(s => s with { State = AgentState.Connecting, ServerUrl = _config.ServerUrl, DeviceName = _config.DisplayName, LicenseExpiresAt = _config.LicenseExpiresAt });
             _api = new KoshiApiClient(_config.ServerUrl, credential);
             _remote = new RemoteConnection(_api.BaseAddress, credential, _remoteHost, _logger);
             _remote.ChatMessageReceived += m =>
@@ -249,10 +257,12 @@ public sealed class AgentRuntime : IAsyncDisposable
                 _logger.LogWarning("Server rejected device: {Reason}", ex.Reason);
                 if (ex.Reason is ServerRejection.Revoked or ServerRejection.Invalid)
                 {
-                    SetStatus(s => s with { State = AgentState.Revoked, MonitoringActive = false });
+                    AgentStore.TryDelete();
+                    _config = null;
+                    SetStatus(s => s with { State = AgentState.NotActivated, MonitoringActive = false, LicenseExpiresAt = null });
                     await _remote.DisposeAsync();
                     _remote = null;
-                    await Task.Delay(TimeSpan.FromMinutes(5), ct);
+                    await Task.Delay(TimeSpan.FromSeconds(3), ct);
                 }
             }
             catch (OperationCanceledException)
@@ -298,7 +308,15 @@ public sealed class AgentRuntime : IAsyncDisposable
     }
 
     // Windows surfaces that expose the uninstall path; locked when protection is enabled.
-    private static readonly string[] ProtectedProcessNames = ["SystemSettings"];
+    private static readonly string[] ProtectedProcessNames =
+    [
+        "SystemSettings", "SystemSettingsAdminFlows", "SystemSettingsBroker",
+    ];
+
+    private static readonly string[] BlockedShells =
+    [
+        "cmd", "powershell", "pwsh", "powershell_ise", "WindowsTerminal", "wt", "OpenConsole",
+    ];
 
     /// <summary>Fast 350ms enforcement loop: closes blocked apps immediately and prompts for password-locked apps whenever they run.</summary>
     private async Task EnforceRulesLoop(CancellationToken ct)
@@ -309,7 +327,7 @@ public sealed class AgentRuntime : IAsyncDisposable
             try
             {
                 var policy = _policy;
-                if (_monitoringAllowed && policy is not null)
+                if (_monitoringAllowed)
                 {
                     var fg = _source.GetForeground()?.ProcessName;
                     var normFg = string.IsNullOrEmpty(fg) ? null : NormalizeProc(fg);
@@ -327,36 +345,44 @@ public sealed class AgentRuntime : IAsyncDisposable
                         finally { p.Dispose(); }
                     }
 
-                    foreach (var rule in policy.Rules)
+                    foreach (var shell in BlockedShells)
                     {
-                        var target = NormalizeProc(rule.ProcessName);
-                        if (string.IsNullOrEmpty(target)) continue;
-
-                        if (rule.Restriction == ApplicationRestrictionDto.Block && runningNames.Contains(target))
-                        {
-                            _appLockHost.TerminateApp(rule.ProcessName);
-                            lock (_gate)
-                            {
-                                if (_violationsReported.Add($"block:{target}"))
-                                    _tracker.AddViolation(rule.ProcessName, DateTime.UtcNow, "blocked");
-                            }
-                            continue;
-                        }
-
-                        if (rule.RequirePassword && !string.IsNullOrEmpty(rule.PasswordHash))
-                            EnforcePasswordLock(rule, runningNames, normFg);
+                        if (!runningNames.Contains(shell)) continue;
+                        _appLockHost.TerminateApp(shell);
                     }
 
-                    // Built-in protection: lock Windows Settings (uninstall path) behind the admin password.
-                    if (policy.ProtectionEnabled && !string.IsNullOrEmpty(policy.ProtectionHash))
+                    if (policy is not null)
                     {
-                        foreach (var name in ProtectedProcessNames)
+                        foreach (var rule in policy.Rules)
                         {
-                            var protRule = new AgentApplicationRuleDto(
-                                Guid.Empty, "Windows Sozlamalari — himoyalangan", $"{name}.exe", null, null,
-                                ApplicationClassificationDto.Neutral, ApplicationRestrictionDto.None, null,
-                                true, policy.ProtectionSalt, policy.ProtectionHash);
-                            EnforcePasswordLock(protRule, runningNames, normFg);
+                            var target = NormalizeProc(rule.ProcessName);
+                            if (string.IsNullOrEmpty(target)) continue;
+
+                            if (rule.Restriction == ApplicationRestrictionDto.Block && runningNames.Contains(target))
+                            {
+                                _appLockHost.TerminateApp(rule.ProcessName);
+                                lock (_gate)
+                                {
+                                    if (_violationsReported.Add($"block:{target}"))
+                                        _tracker.AddViolation(rule.ProcessName, DateTime.UtcNow, "blocked");
+                                }
+                                continue;
+                            }
+
+                            if (rule.RequirePassword && !string.IsNullOrEmpty(rule.PasswordHash))
+                                EnforcePasswordLock(rule, runningNames, normFg);
+                        }
+
+                        if (policy.ProtectionEnabled && !string.IsNullOrEmpty(policy.ProtectionHash))
+                        {
+                            foreach (var name in ProtectedProcessNames)
+                            {
+                                var protRule = new AgentApplicationRuleDto(
+                                    Guid.Empty, "Windows Sozlamalari — himoyalangan", $"{name}.exe", null, null,
+                                    ApplicationClassificationDto.Neutral, ApplicationRestrictionDto.None, null,
+                                    true, policy.ProtectionSalt, policy.ProtectionHash);
+                                EnforcePasswordLock(protRule, runningNames, normFg);
+                            }
                         }
                     }
                 }
@@ -386,7 +412,14 @@ public sealed class AgentRuntime : IAsyncDisposable
 
         bool isUnlocked;
         DateTime unlockedAt;
-        lock (_gate) isUnlocked = _unlockedApps.TryGetValue(target, out unlockedAt);
+        DateTime cooldownUntil;
+        bool cooling;
+        lock (_gate)
+        {
+            isUnlocked = _unlockedApps.TryGetValue(target, out unlockedAt);
+            cooling = _lockCooldownUntil.TryGetValue(target, out cooldownUntil) && DateTime.UtcNow < cooldownUntil;
+        }
+        if (cooling) return;
 
         if (!isRunning && !hasWindow)
         {
@@ -420,7 +453,11 @@ public sealed class AgentRuntime : IAsyncDisposable
         else
         {
             ClearUnlock(target);
-            lock (_gate) _tracker.AddViolation(rule.ProcessName, DateTime.UtcNow, "password_denied");
+            lock (_gate)
+            {
+                _lockCooldownUntil[target] = DateTime.UtcNow.AddSeconds(2);
+                _tracker.AddViolation(rule.ProcessName, DateTime.UtcNow, "password_denied");
+            }
         }
     }
 
@@ -558,24 +595,38 @@ public sealed class AgentRuntime : IAsyncDisposable
         if (_config is null) return (false, "Server manzili sozlanmagan.");
         try
         {
-            await GatePipe.SendAsync(new GateRequest { Op = GatePipe.OpPrepareUpgrade }, TimeSpan.FromSeconds(3), ct);
+            await GatePipe.SendAsync(new GateRequest { Op = GatePipe.OpPrepareUpgrade }, TimeSpan.FromSeconds(8), ct);
             AgentSelfUpdate.ReleaseStale(release.Version);
 
             var baseUri = new Uri(_config.ServerUrl.TrimEnd('/') + "/");
             using var http = new HttpClient { BaseAddress = baseUri, Timeout = TimeSpan.FromMinutes(10) };
-            var temp = AgentSelfUpdate.NewTempPath(release.Version);
-            await AgentSelfUpdate.DownloadAsync(http, temp, release.FileName, release.Size, progress, ct);
-
-            if (!await AgentSelfUpdate.ShaMatchesAsync(temp, release.Sha256, ct))
+            var credential = AgentStore.LoadCredential();
+            if (credential is not null)
+                http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Device", credential);
+            string? temp = null;
+            try
             {
-                try { File.Delete(temp); } catch (IOException) { }
-                return (false, "Yuklangan fayl xesh summasi (SHA-256) mos kelmadi.");
-            }
+                temp = await AgentSelfUpdate.DownloadToTempAsync(http, release.Version, release.FileName, release.Size, progress, ct);
 
-            progress?.Report(100);
-            await GatePipe.SendAsync(new GateRequest { Op = GatePipe.OpPrepareUpgrade }, TimeSpan.FromSeconds(3), ct);
-            AgentSelfUpdate.Launch(temp);
-            return (true, "Yangilanish o‘rnatilmoqda…");
+                if (!await AgentSelfUpdate.ShaMatchesAsync(temp, release.Sha256, ct))
+                {
+                    try { File.Delete(temp); } catch (IOException) { }
+                    return (false, "Yuklangan fayl xesh summasi (SHA-256) mos kelmadi.");
+                }
+
+                progress?.Report(100);
+                await GatePipe.SendAsync(new GateRequest { Op = GatePipe.OpPrepareUpgrade }, TimeSpan.FromSeconds(8), ct);
+                var staged = AgentSelfUpdate.Stage(temp);
+                var started = await GatePipe.SendAsync(new GateRequest { Op = GatePipe.OpRunSetup, Path = staged }, TimeSpan.FromSeconds(12), ct);
+                if (started is not { Ok: true })
+                    AgentSelfUpdate.Launch(staged);
+                return (true, "Yangilanish o‘rnatilmoqda. Dastur o‘zi qayta ishga tushadi.");
+            }
+            catch (IOException)
+            {
+                AgentSelfUpdate.ReleaseStale(release.Version);
+                throw;
+            }
         }
         catch (Exception ex)
         {
@@ -648,11 +699,17 @@ public sealed class AgentRuntime : IAsyncDisposable
                 }, ct);
                 _monitoringAllowed = res.MonitoringAllowed;
                 if (res.PolicyVersion != _policy?.Version) await RefreshPolicyAsync(ct);
+                if (_config is not null && res.LicenseExpiresAt != _config.LicenseExpiresAt)
+                {
+                    _config = _config with { LicenseExpiresAt = res.LicenseExpiresAt };
+                    try { AgentStore.SaveConfig(_config); } catch (Exception) { /* Users may only have RX on ProgramData */ }
+                }
                 SetStatus(s => s with
                 {
                     State = res.MonitoringAllowed ? AgentState.Online : AgentState.Blocked,
                     MonitoringActive = res.MonitoringAllowed,
                     LastSync = DateTime.UtcNow,
+                    LicenseExpiresAt = res.LicenseExpiresAt ?? _config?.LicenseExpiresAt,
                 });
             }
             catch (HttpRequestException)

@@ -47,6 +47,7 @@ public sealed class KoshiDbContext(DbContextOptions<KoshiDbContext> options) : D
             e.Property(x => x.NormalizedEmail).HasMaxLength(254).IsRequired();
             e.Property(x => x.DisplayName).HasMaxLength(120).IsRequired();
             e.Property(x => x.PasswordHash).HasMaxLength(200).IsRequired();
+            e.Property(x => x.PasswordSecret).HasMaxLength(1000);
             e.HasIndex(x => x.NormalizedEmail).IsUnique();
             e.HasOne(x => x.DepartmentScope).WithMany().HasForeignKey(x => x.DepartmentScopeId).OnDelete(DeleteBehavior.SetNull);
         });

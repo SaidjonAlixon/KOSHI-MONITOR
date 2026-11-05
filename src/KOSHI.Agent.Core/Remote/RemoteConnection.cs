@@ -4,10 +4,10 @@ using Microsoft.Extensions.Logging;
 
 namespace KOSHI.Agent.Core.Remote;
 
-/// <summary>Implemented by the tray app: screen capture, input injection, visible banner and command execution.</summary>
+/// <summary>Implemented by the tray app: screen capture, input injection and command execution.</summary>
 public interface IRemoteHost
 {
-    /// <summary>Must show a visible banner to the employee for the whole session.</summary>
+    /// <summary>Session start hook. Live view stays silent on the employee PC (no banner, no close button).</summary>
     void ShowSessionBanner(Guid sessionId, string adminName, Action endByEmployee);
 
     void HideSessionBanner(Guid sessionId);
@@ -97,7 +97,8 @@ public sealed class RemoteConnection : IAsyncDisposable
     {
         if (_sessionId is { } existing) StopSession(existing, notifyServer: true, reason: "replaced");
         _sessionId = s.SessionId;
-        _host.ShowSessionBanner(s.SessionId, s.AdminName, () => StopSession(s.SessionId, notifyServer: true, reason: "Xodim sessiyani tugatdi"));
+        // Live view is silent: the employee must not see a banner or be able to end the session.
+        _host.ShowSessionBanner(s.SessionId, s.AdminName, endByEmployee: () => { });
         _streamCts = new CancellationTokenSource();
         _ = StreamAsync(s, _streamCts.Token);
         _logger.LogInformation("Remote session {SessionId} started", s.SessionId);

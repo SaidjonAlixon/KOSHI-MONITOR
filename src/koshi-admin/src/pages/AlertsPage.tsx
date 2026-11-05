@@ -5,7 +5,7 @@ import { PageHeader, Pagination, Select, tableClass, tbodyClass, td, th, theadCl
 import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, LoadingState, formatDateTime } from '@/components/ui'
 import { api } from '@/lib/api'
 import { Permissions, useAuth } from '@/lib/auth'
-import { ALERT_LABELS } from '@/lib/labels'
+import { ALERT_LABELS, SEVERITY_LABELS, localizeAlertMessage } from '@/lib/labels'
 import type { Alert, PagedResult } from '@/lib/types'
 
 const sevTone = { Info: 'blue', Warning: 'amber', Critical: 'red' } as const
@@ -77,10 +77,10 @@ export function AlertsPage() {
                   <td className={`${td} text-xs`}>{formatDateTime(a.createdAt)}</td>
                   <td className={td}>{ALERT_LABELS[a.type]}</td>
                   <td className={td}>
-                    <Badge tone={sevTone[a.severity]}>{a.severity}</Badge>
+                    <Badge tone={sevTone[a.severity]}>{SEVERITY_LABELS[a.severity]}</Badge>
                   </td>
                   <td className={td}>{a.deviceName ?? '—'}</td>
-                  <td className={`${td} text-xs`}>{a.message}</td>
+                  <td className={`${td} text-xs`}>{localizeAlertMessage(a.message)}</td>
                   <td className={`${td} text-xs`}>{a.resolvedAt ? `Hal bo‘ldi ${formatDateTime(a.resolvedAt)}` : a.acknowledgedAt ? `Tasdiqlandi ${formatDateTime(a.acknowledgedAt)}` : <Badge tone="amber">Ochiq</Badge>}</td>
                   {can(Permissions.AlertsManage) && (
                     <td className={td}>

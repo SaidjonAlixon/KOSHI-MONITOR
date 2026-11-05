@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Lock, Pencil, Plus, Save, ShieldCheck, Trash2, UserPlus } from 'lucide-react'
+import { Copy, Eye, EyeOff, Lock, Pencil, Plus, Save, ShieldCheck, Trash2, UserPlus } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Checkbox, Field, Input, Modal, PageHeader, Pagination, Select, tableClass, tbodyClass, td, th, theadClass, useDepartments } from '@/components/forms'
 import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, LoadingState, formatDateTime } from '@/components/ui'
@@ -8,16 +8,66 @@ import { Permissions, useAuth } from '@/lib/auth'
 import { PERMISSION_GROUPS, PERMISSION_LABELS } from '@/lib/labels'
 import type { AdminUser, PagedResult, PermissionInfo, Role } from '@/lib/types'
 
+function randomInt(maxExclusive: number): number {
+  const r = crypto.getRandomValues(new Uint32Array(1))[0] ?? 0
+  return Math.floor((r / 2 ** 32) * maxExclusive)
+}
+
+function generateAdminPassword(): string {
+  const lower = 'abcdefghijkmnpqrstuvwxyz'
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
+  const digits = '23456789'
+  const symbols = '!@#$%&*?'
+  const pick = (set: string) => set.charAt(randomInt(set.length))
+  const chars = [pick(lower), pick(upper), pick(digits), pick(symbols)]
+  const all = lower + upper + digits + symbols
+  while (chars.length < 14) chars.push(pick(all))
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1)
+    const tmp = chars[i]!
+    chars[i] = chars[j]!
+    chars[j] = tmp
+  }
+  return chars.join('')
+}
+
+function CredentialCell({ value, empty }: { value: string | null | undefined; empty: string }) {
+  const [shown, setShown] = useState(true)
+  if (!value) return <span className="text-xs text-slate-400">{empty}</span>
+  return (
+    <div className="flex items-center gap-1">
+      <code className="max-w-40 truncate font-mono text-xs">{shown ? value : '••••••••'}</code>
+      <Button type="button" variant="ghost" className="!p-1" title={shown ? 'Yashirish' : 'Ko‘rsatish'} onClick={() => setShown((s) => !s)}>
+        {shown ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+      </Button>
+      <Button type="button" variant="ghost" className="!p-1" title="Nusxa olish" onClick={() => navigator.clipboard.writeText(value)}>
+        <Copy className="size-3.5" />
+      </Button>
+    </div>
+  )
+}
+
 function UserForm({ user, roles, onDone }: { user: AdminUser | null; roles: Role[]; onDone: () => void }) {
   const qc = useQueryClient()
+  const { user: me } = useAuth()
+  const isSuperAdmin = me?.roles.includes('SuperAdmin') ?? false
+  const editingSuperAdmin = user?.roles.includes('SuperAdmin') ?? false
   const deps = useDepartments()
-  const [selectedRoles, setSelectedRoles] = useState<string[]>(user?.roles ?? ['Viewer'])
+  const defaultRole = roles.find((r) => r.name === 'ITAdmin') ?? roles.find((r) => r.name === 'Viewer') ?? roles.find((r) => !r.permissionsLocked) ?? roles[0]
+  const [selectedRoles, setSelectedRoles] = useState<string[]>(user?.roles ?? (defaultRole ? [defaultRole.name] : []))
+  const [password, setPassword] = useState(user?.password ?? '')
+  const [showPassword, setShowPassword] = useState(true)
   const save = useMutation({
     mutationFn: (f: FormData) => {
-      const common = { displayName: String(f.get('displayName')).trim(), roles: selectedRoles, departmentScopeId: String(f.get('departmentScopeId')) || null }
-      const password = String(f.get('password') ?? '')
+      const nextRoles = editingSuperAdmin
+        ? selectedRoles.includes('SuperAdmin')
+          ? selectedRoles
+          : [...selectedRoles, 'SuperAdmin']
+        : selectedRoles.filter((r) => r !== 'SuperAdmin')
+      const common = { displayName: String(f.get('displayName')).trim(), roles: nextRoles, departmentScopeId: String(f.get('departmentScopeId')) || null }
+      const passwordChanged = !!password && password !== (user?.password ?? '')
       return user
-        ? api(`/api/users/${user.id}`, { method: 'PUT', body: { ...common, isActive: f.get('isActive') === 'true', newPassword: password || null } })
+        ? api(`/api/users/${user.id}`, { method: 'PUT', body: { ...common, isActive: editingSuperAdmin ? true : f.get('isActive') === 'true', newPassword: passwordChanged ? password : null } })
         : api('/api/users', { method: 'POST', body: { ...common, email: String(f.get('email')).trim(), password } })
     },
     onSuccess: () => {
@@ -33,15 +83,62 @@ function UserForm({ user, roles, onDone }: { user: AdminUser | null; roles: Role
   const errors = save.error instanceof ApiError ? Object.values(save.error.errors).flat() : []
 
   return (
-    <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
+    <form onSubmit={submit} autoComplete="off" className="grid gap-4 sm:grid-cols-2">
       <Field label="E-mail">
-        <Input name="email" type="email" required disabled={!!user} defaultValue={user?.email} />
+        <Input name="email" type="email" required disabled={!!user} defaultValue={user?.email} autoComplete="off" />
       </Field>
       <Field label="Ism">
-        <Input name="displayName" required maxLength={120} defaultValue={user?.displayName} />
+        <Input name="displayName" required maxLength={120} defaultValue={user?.displayName} autoComplete="off" />
       </Field>
-      <Field label={user ? 'Yangi parol (ixtiyoriy)' : 'Parol'} hint="Kamida 12 belgi, katta/kichik harf, raqam yoki belgi">
-        <Input name="password" type="password" autoComplete="new-password" minLength={12} required={!user} />
+      <Field
+        label={user ? (isSuperAdmin && user.password ? 'Parol (o‘zgartirish ixtiyoriy)' : 'Yangi parol (ixtiyoriy)') : 'Parol'}
+        hint={
+          isSuperAdmin && user?.password
+            ? 'Super Admin joriy login va parolni ko‘radi. O‘zgartirish uchun yangi qiymat yozing.'
+            : 'Kamida 12 belgi: katta va kichik harf, raqam yoki belgi. Ko‘zcha bilan ochiq ko‘rinadi.'
+        }
+        className="sm:col-span-2"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-64 flex-1">
+            <Input
+              type={showPassword ? 'text' : 'password'}
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+              minLength={user ? undefined : 12}
+              required={!user}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={user ? 'o‘zgartirish uchun yangi parol' : 'parol ochiq ko‘rinadi'}
+              className="w-full pr-11 font-mono tracking-wide"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-800 dark:border-white/10 dark:bg-white/10 dark:text-slate-200 dark:hover:bg-white/20"
+              aria-label={showPassword ? 'Parolni yashirish' : 'Parolni ko‘rsatish'}
+              title={showPassword ? 'Parolni yashirish' : 'Parolni ko‘rsatish'}
+            >
+              {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            </button>
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              setPassword(generateAdminPassword())
+              setShowPassword(true)
+            }}
+          >
+            Avtomatik yaratish
+          </Button>
+          {password && (
+            <Button type="button" variant="ghost" onClick={() => navigator.clipboard.writeText(password)}>
+              <Copy className="size-4" /> Nusxa olish
+            </Button>
+          )}
+        </div>
       </Field>
       <Field label="Ma’lumot doirasi" hint="HR/Viewer faqat shu bo‘lim ma’lumotini ko‘radi">
         <Select name="departmentScopeId" defaultValue={user?.departmentScopeId ?? ''}>
@@ -55,27 +152,43 @@ function UserForm({ user, roles, onDone }: { user: AdminUser | null; roles: Role
       </Field>
       {user && (
         <Field label="Holat">
-          <Select name="isActive" defaultValue={String(user.isActive)}>
+          <Select name="isActive" defaultValue={String(editingSuperAdmin ? true : user.isActive)} disabled={editingSuperAdmin}>
             <option value="true">Faol</option>
             <option value="false">O‘chirilgan (barcha sessiyalar bekor qilinadi)</option>
           </Select>
+          {editingSuperAdmin && <p className="mt-1 text-xs text-slate-500">Super Adminni o‘chirib yoki faolsizlantirib bo‘lmaydi.</p>}
         </Field>
       )}
       <div className="sm:col-span-2">
         <p className="mb-2 text-sm font-medium">Rollar</p>
+        <p className="mb-2 text-xs text-slate-500">
+          {editingSuperAdmin
+            ? 'Super Admin roli olib tashlanmaydi.'
+            : 'Admin deb belgilansa, odam kuzatuv va boshqaruvning hammasini qila oladi. Super Admin emas — parollarni faqat Super Admin ko‘radi.'}
+        </p>
         <div className="grid gap-2 sm:grid-cols-2">
-          {roles.map((r) => (
-            <Checkbox
-              key={r.id}
-              label={
-                <span>
-                  <span className="font-medium">{r.name}</span> <span className="text-xs text-slate-500">— {r.description || `${r.permissions.length} ta ruxsat`}</span>
-                </span>
-              }
-              checked={selectedRoles.includes(r.name)}
-              onChange={() => setSelectedRoles((s) => (s.includes(r.name) ? s.filter((x) => x !== r.name) : [...s, r.name]))}
-            />
-          ))}
+          {roles
+            .filter((r) => r.name !== 'SuperAdmin' || editingSuperAdmin)
+            .map((r) => {
+              const lockedSuper = r.name === 'SuperAdmin'
+              return (
+                <Checkbox
+                  key={r.id}
+                  label={
+                    <span>
+                      <span className="font-medium">{r.name === 'ITAdmin' ? 'Admin' : r.name}</span>{' '}
+                      <span className="text-xs text-slate-500">— {r.description || `${r.permissions.length} ta ruxsat`}</span>
+                    </span>
+                  }
+                  checked={selectedRoles.includes(r.name)}
+                  disabled={lockedSuper}
+                  onChange={() => {
+                    if (lockedSuper) return
+                    setSelectedRoles((s) => (s.includes(r.name) ? s.filter((x) => x !== r.name) : [...s, r.name]))
+                  }}
+                />
+              )
+            })}
         </div>
       </div>
       {save.isError && (
@@ -135,7 +248,13 @@ function RolesEditor({ roles, catalog }: { roles: Role[]; catalog: PermissionInf
       invalidate()
     },
   })
-  const remove = useMutation({ mutationFn: () => api(`/api/roles/${role!.id}`, { method: 'DELETE' }), onSuccess: () => (setSelectedId(roles[0]?.id ?? ''), invalidate()) })
+  const remove = useMutation({
+    mutationFn: (id: string) => api(`/api/roles/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      setSelectedId(roles[0]?.id ?? '')
+      invalidate()
+    },
+  })
 
   if (!role) return <EmptyState title="Rollar yo‘q" />
   const locked = role.permissionsLocked || !editable
@@ -147,8 +266,8 @@ function RolesEditor({ roles, catalog }: { roles: Role[]; catalog: PermissionInf
         <CardHeader title="Rollar" />
         <ul className="divide-y divide-slate-100 dark:divide-white/5">
           {roles.map((r) => (
-            <li key={r.id}>
-              <button onClick={() => setSelectedId(r.id)} className={`flex w-full items-center justify-between px-5 py-3 text-left text-sm ${r.id === role.id ? 'bg-brand-50/70 dark:bg-brand-500/10' : 'hover:bg-slate-50 dark:hover:bg-white/[0.03]'}`}>
+            <li key={r.id} className={`flex items-center ${r.id === role.id ? 'bg-brand-50/70 dark:bg-brand-500/10' : 'hover:bg-slate-50 dark:hover:bg-white/[0.03]'}`}>
+              <button onClick={() => setSelectedId(r.id)} className="flex flex-1 items-center justify-between px-5 py-3 text-left text-sm">
                 <span>
                   <span className="font-medium">{r.name}</span>
                   <span className="block text-xs text-slate-500">
@@ -157,6 +276,21 @@ function RolesEditor({ roles, catalog }: { roles: Role[]; catalog: PermissionInf
                 </span>
                 {r.isSystem && <Badge tone="gray">tizim</Badge>}
               </button>
+              {editable && !r.permissionsLocked && (
+                <button
+                  className="px-3 text-slate-400 hover:text-rose-600"
+                  title={`${r.name} rolini o‘chirish`}
+                  onClick={() => {
+                    if (r.userCount > 0) {
+                      alert(`“${r.name}” roli ${r.userCount} ta foydalanuvchida bor. Avval ularga boshqa rol bering, so‘ng o‘chiring.`)
+                      return
+                    }
+                    if (confirm(`“${r.name}” roli butunlay o‘chirilsinmi?`)) remove.mutate(r.id)
+                  }}
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              )}
             </li>
           ))}
         </ul>
@@ -184,9 +318,19 @@ function RolesEditor({ roles, catalog }: { roles: Role[]; catalog: PermissionInf
           actions={
             editable && (
               <div className="flex gap-2">
-                {!role.isSystem && (
-                  <Button variant="ghost" onClick={() => confirm(`${role.name} roli o‘chirilsinmi?`) && remove.mutate()} loading={remove.isPending}>
-                    <Trash2 className="size-4 text-rose-500" />
+                {!role.permissionsLocked && (
+                  <Button
+                    variant="ghost"
+                    loading={remove.isPending}
+                    onClick={() => {
+                      if (role.userCount > 0) {
+                        alert(`“${role.name}” roli ${role.userCount} ta foydalanuvchida bor. Avval ularga boshqa rol bering, so‘ng o‘chiring.`)
+                        return
+                      }
+                      if (confirm(`“${role.name}” roli butunlay o‘chirilsinmi?`)) remove.mutate(role.id)
+                    }}
+                  >
+                    <Trash2 className="size-4 text-rose-500" /> O‘chirish
                   </Button>
                 )}
                 <Button onClick={() => save.mutate()} loading={save.isPending} disabled={!dirty}>
@@ -232,6 +376,9 @@ function RolesEditor({ roles, catalog }: { roles: Role[]; catalog: PermissionInf
 }
 
 export function UsersPage() {
+  const qc = useQueryClient()
+  const { user: currentUser } = useAuth()
+  const isSuperAdmin = currentUser?.roles.includes('SuperAdmin') ?? false
   const [tab, setTab] = useState<'users' | 'roles'>('users')
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
@@ -243,6 +390,11 @@ export function UsersPage() {
   })
   const roles = useQuery({ queryKey: ['roles'], queryFn: () => api<Role[]>('/api/roles') })
   const catalog = useQuery({ queryKey: ['permissions'], queryFn: () => api<PermissionInfo[]>('/api/permissions'), staleTime: Infinity })
+  const removeUser = useMutation({
+    mutationFn: (id: string) => api(`/api/users/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+    onError: (e) => alert((e as Error).message),
+  })
 
   return (
     <>
@@ -284,6 +436,8 @@ export function UsersPage() {
               <thead className={theadClass}>
                 <tr>
                   <th className={th}>Foydalanuvchi</th>
+                  {isSuperAdmin && <th className={th}>Login</th>}
+                  {isSuperAdmin && <th className={th}>Parol</th>}
                   <th className={th}>Rollar</th>
                   <th className={th}>Holat</th>
                   <th className={th}>MFA</th>
@@ -296,13 +450,23 @@ export function UsersPage() {
                   <tr key={u.id}>
                     <td className={td}>
                       <p className="font-medium">{u.displayName}</p>
-                      <p className="text-xs text-slate-500">{u.email}</p>
+                      {!isSuperAdmin && <p className="text-xs text-slate-500">{u.email}</p>}
                     </td>
+                    {isSuperAdmin && (
+                      <td className={td}>
+                        <CredentialCell value={u.email} empty="—" />
+                      </td>
+                    )}
+                    {isSuperAdmin && (
+                      <td className={td}>
+                        <CredentialCell value={u.password} empty="Saqlanmagan — parolni yangilang" />
+                      </td>
+                    )}
                     <td className={td}>
                       <div className="flex flex-wrap gap-1">
                         {u.roles.map((r) => (
                           <Badge key={r} tone={r === 'SuperAdmin' ? 'red' : 'blue'}>
-                            {r}
+                            {r === 'ITAdmin' ? 'Admin' : r}
                           </Badge>
                         ))}
                       </div>
@@ -313,9 +477,26 @@ export function UsersPage() {
                     <td className={td}>{u.mfaEnabled ? <ShieldCheck className="size-4 text-emerald-500" /> : <span className="text-xs text-slate-400">—</span>}</td>
                     <td className={`${td} text-xs`}>{formatDateTime(u.lastLoginAt)}</td>
                     <td className={td}>
-                      <Button variant="ghost" onClick={() => setEditing(u)} title="Tahrirlash">
-                        <Pencil className="size-4" />
-                      </Button>
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" onClick={() => setEditing(u)} title="Tahrirlash">
+                          <Pencil className="size-4" />
+                        </Button>
+                        {u.id !== currentUser?.id && !u.roles.includes('SuperAdmin') && (
+                          <Button
+                            variant="ghost"
+                            title="O‘chirish"
+                            loading={removeUser.isPending && removeUser.variables === u.id}
+                            onClick={() => confirm(`“${u.displayName}” (${u.email}) administratori o‘chirilsinmi? Uning barcha sessiyalari bekor qilinadi.`) && removeUser.mutate(u.id)}
+                          >
+                            <Trash2 className="size-4 text-rose-500" />
+                          </Button>
+                        )}
+                        {u.roles.includes('SuperAdmin') && (
+                          <span title="Super Adminni o‘chirib bo‘lmaydi" className="inline-flex items-center px-1 text-slate-400">
+                            <Lock className="size-4" />
+                          </span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

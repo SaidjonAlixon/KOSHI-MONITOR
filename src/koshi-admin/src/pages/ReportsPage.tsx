@@ -2,6 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { Download, Printer } from 'lucide-react'
 import { useState } from 'react'
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { ActivityDetailView } from '@/components/ActivityDetail'
 import { Field, FilterBar, Input, PageHeader, Select, defaultFilters, toLocalInput, type Filters } from '@/components/forms'
 import { FormulaCard, ReportTable } from '@/components/ReportTable'
 import { Button, Card, CardHeader, EmptyState, ErrorState, LoadingState } from '@/components/ui'
@@ -15,6 +16,25 @@ const periods: [Period, string][] = [
   ['weekly', 'Haftalik'],
   ['monthly', 'Oylik'],
 ]
+
+/** Local [from, to) ISO range for the selected period, matching the server's day/week/month windows. */
+function periodRange(period: Period, date: string): { from: string; to: string } {
+  const start = new Date(`${date}T00:00:00`)
+  const end = new Date(start)
+  if (period === 'weekly') {
+    const offset = (start.getDay() + 6) % 7
+    start.setDate(start.getDate() - offset)
+    end.setTime(start.getTime())
+    end.setDate(end.getDate() + 7)
+  } else if (period === 'monthly') {
+    start.setDate(1)
+    end.setTime(start.getTime())
+    end.setMonth(end.getMonth() + 1)
+  } else {
+    end.setDate(end.getDate() + 1)
+  }
+  return { from: start.toISOString(), to: end.toISOString() }
+}
 
 export function ReportsPage() {
   const { can } = useAuth()
@@ -99,6 +119,21 @@ export function ReportsPage() {
             {q.data.rows.length === 0 ? <EmptyState title="Bu davr uchun ma’lumot yo‘q" /> : <ReportTable report={q.data} />}
           </Card>
           <FormulaCard report={q.data} />
+
+          <div className="print:hidden">
+            <PageHeader title="Kompyuter bo‘yicha batafsil faoliyat" subtitle="Har kun yangidan yoziladi. Yoqilgan/o‘chgan vaqtlari, dasturlar, oynalar va brauzer — tanlangan kun/davr uchun to‘liq" />
+            <div className="mt-4">
+              <ActivityDetailView
+                query={{
+                  ...periodRange(period, date),
+                  deviceId: filters.deviceId || undefined,
+                  employeeId: filters.employeeId || undefined,
+                  departmentId: filters.departmentId || undefined,
+                  branch: filters.branch || undefined,
+                }}
+              />
+            </div>
+          </div>
         </>
       )}
     </>

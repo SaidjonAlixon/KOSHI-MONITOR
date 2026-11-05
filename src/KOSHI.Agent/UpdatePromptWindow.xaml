@@ -21,7 +21,7 @@
             </StackPanel>
 
             <TextBlock Margin="0,14,0,0" TextWrapping="Wrap" FontSize="12.5" Foreground="#334155"
-                       Text="KOSHI dasturining yangi versiyasi chiqdi. Yangi imkoniyatlar va tuzatishlar ishlashi uchun dasturni hozir yangilang." />
+                       Text="KOSHI dasturining yangi versiyasi chiqdi. Yangilash ni bosing. Windows ruxsat so‘rasa (UAC) Ha ni tanlang — Bekor qilinsa eski versiya qoladi." />
 
             <StackPanel x:Name="ProgressPanel" Margin="0,14,0,0" Visibility="Collapsed">
                 <ProgressBar x:Name="DownloadBar" Height="8" Minimum="0" Maximum="100" Value="0" Foreground="#4F46E5" />

@@ -56,7 +56,7 @@ export function LivePage() {
         ) : q.isError ? (
           <ErrorState error={q.error} onRetry={() => q.refetch()} />
         ) : q.data.length === 0 ? (
-          <EmptyState title="Faol qurilmalar yo‘q" hint="Aktivatsiya qilingan agentlar heartbeat yuborganda shu yerda ko‘rinadi." />
+          <EmptyState title="Faol qurilmalar yo‘q" hint="Aktivatsiya qilingan agentlar aloqa yuborganda shu yerda ko‘rinadi." />
         ) : (
           <div className="overflow-x-auto">
             <table className={tableClass}>
@@ -69,7 +69,7 @@ export function LivePage() {
                   <th className={th}>Faoliyat boshlandi</th>
                   <th className={th}>Davomiylik</th>
                   <th className={th}>Onlayn holati</th>
-                  <th className={th}>Oxirgi heartbeat</th>
+                  <th className={th}>Oxirgi aloqa</th>
                   <th className={th}>Agent</th>
                 </tr>
               </thead>

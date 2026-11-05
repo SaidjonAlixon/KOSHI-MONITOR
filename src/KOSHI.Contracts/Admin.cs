@@ -13,6 +13,10 @@ public sealed class CreateDeviceRequest
 
     [Range(5, 10_080)]
     public int ActivationCodeTtlMinutes { get; set; } = 60;
+
+    /// <summary>How long the device stays activated after the code is used. Null or 0 = permanent. 1–3650 days otherwise.</summary>
+    [Range(0, 3650)]
+    public int? LicenseDays { get; set; }
 }
 
 public sealed class UpdateDeviceRequest
@@ -33,10 +37,13 @@ public sealed class IssueActivationCodeRequest
 {
     [Range(5, 10_080)]
     public int TtlMinutes { get; set; } = 60;
+
+    [Range(0, 3650)]
+    public int? LicenseDays { get; set; }
 }
 
 /// <summary>The activation code is shown once and never stored in plaintext.</summary>
-public sealed record ActivationCodeResponse(Guid DeviceId, string ActivationCode, DateTime ExpiresAt);
+public sealed record ActivationCodeResponse(Guid DeviceId, string ActivationCode, DateTime ExpiresAt, int? LicenseDays = null);
 
 public sealed record DeviceDto(
     Guid Id,
@@ -56,7 +63,33 @@ public sealed record DeviceDto(
     int? AppliedPolicyVersion,
     DateTime CreatedAt,
     DateTime? ActivatedAt,
-    string? BlockReason);
+    string? BlockReason,
+    bool? ProtectionEnabled = null,
+    bool ProtectionPasswordSet = false,
+    DateTime? LicenseExpiresAt = null,
+    DateTime? ActivationExpiresAt = null,
+    bool? VpnBlocked = null,
+    bool? InstallBlocked = null);
+
+public sealed class SetDeviceProtectionRequest
+{
+    /// <summary>true = lock Windows Settings on this computer only, false = unlock this computer.</summary>
+    public bool? Enabled { get; set; }
+}
+
+public sealed class SetDeviceLicenseRequest
+{
+    /// <summary>0 or null = permanent. 1–3650 = days from now.</summary>
+    [Range(0, 3650)]
+    public int? LicenseDays { get; set; }
+}
+
+/// <summary>Per-computer override. Null = follow the organization-wide default.</summary>
+public sealed class SetDeviceNetworkControlsRequest
+{
+    public bool? VpnBlocked { get; set; }
+    public bool? InstallBlocked { get; set; }
+}
 
 public sealed class DeviceQuery : PageQuery
 {
@@ -164,7 +197,13 @@ public sealed class UpsertWorkScheduleRequest
 
 // ---------- Policies / Applications ----------
 
-public sealed record PolicyAssignmentDto(PolicyAssignmentScopeDto Scope, Guid? DepartmentId, Guid? DeviceId);
+public sealed record PolicyAssignmentDto(
+    PolicyAssignmentScopeDto Scope,
+    Guid? DepartmentId,
+    Guid? DeviceId,
+    string? DepartmentName = null,
+    string? DeviceName = null,
+    string? EmployeeName = null);
 
 public sealed class UpsertPolicyRequest
 {
@@ -405,6 +444,43 @@ public sealed record TimelineItemDto(
 
 public sealed record ApplicationUsageDto(string ProcessName, long ForegroundSeconds, long BackgroundSeconds, int SessionCount, double Share);
 
+// ---------- Activity detail (per computer) ----------
+
+/// <summary>Everything one computer did in a period: power on/off, active vs idle, apps, windows and browsing.</summary>
+public sealed record ActivityDetailDto(
+    Guid DeviceId,
+    string DeviceName,
+    string? Hostname,
+    string? EmployeeName,
+    string? DepartmentName,
+    DateTime From,
+    DateTime To,
+    string TimeZone,
+    ActivityTotalsDto Totals,
+    IReadOnlyList<PowerSessionDto> PowerSessions,
+    IReadOnlyList<ApplicationUsageDto> Apps,
+    IReadOnlyList<WindowUsageDto> ForegroundWindows,
+    IReadOnlyList<WindowUsageDto> BackgroundWindows,
+    IReadOnlyList<BrowsingItemDto> Browsing);
+
+public sealed record ActivityTotalsDto(
+    double ActiveSeconds,
+    double IdleSeconds,
+    double OnlineSeconds,
+    DateTime? FirstActivityAt,
+    DateTime? LastActivityAt,
+    int PowerSessionCount,
+    int AppCount,
+    int BrowsingCount);
+
+/// <summary>One "computer turned on until turned off (or still on)" interval.</summary>
+public sealed record PowerSessionDto(DateTime OnAt, DateTime? OffAt, int? DurationSeconds, bool Ongoing);
+
+public sealed record WindowUsageDto(string ProcessName, string? WindowTitle, long Seconds, int Count, DateTime FirstAt, DateTime LastAt);
+
+/// <summary>A browser page/search grouped from window titles. Kind: "qidiruv" | "video" | "sahifa".</summary>
+public sealed record BrowsingItemDto(string Browser, string Title, string? Site, string? Query, string Kind, long Seconds, int Visits, DateTime FirstAt, DateTime LastAt, string? Url = null);
+
 public sealed record IdleSummaryDto(
     DateTime From,
     DateTime To,
@@ -525,7 +601,9 @@ public sealed record UserDto(
     IReadOnlyList<string> Roles,
     Guid? DepartmentScopeId,
     DateTime? LastLoginAt,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    string? Password = null);
 
 public sealed class CreateUserRequest
 {
@@ -594,7 +672,8 @@ public sealed record SystemSettingsDto(
     bool AgentAutoUpdate,
     bool AgentProtectionEnabled = false,
     bool AgentLocationEnabled = true,
-    bool AgentProtectionPasswordSet = false);
+    bool AgentProtectionPasswordSet = false,
+    string? AgentProtectionPassword = null);
 
 public sealed class UpdateSystemSettingsRequest
 {
@@ -711,6 +790,9 @@ public sealed class UpdateDeviceControlsRequest
 
     /// <summary>Any software installation (normal or "Run as administrator") requires the protection password.</summary>
     public bool InstallBlocked { get; set; }
+
+    /// <summary>When true, every computer follows this default (per-device overrides are cleared).</summary>
+    public bool ApplyToAllDevices { get; set; }
 }
 
 // ---------- Device location ----------

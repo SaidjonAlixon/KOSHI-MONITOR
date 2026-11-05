@@ -56,7 +56,7 @@ export function DashboardPage() {
         <Stat label="Offlayn" value={d.offlineDevices} icon={MonitorOff} tone="bg-slate-100 text-slate-600 dark:bg-white/5" />
         <Stat label="Bugungi monitoring vaqti" value={formatDuration(d.monitoredSecondsToday)} icon={Clock} tone="bg-violet-50 text-violet-600 dark:bg-violet-500/10" />
         <Stat label="Bugun faol dasturlar" value={d.activeApplicationsToday} icon={AppWindow} tone="bg-sky-50 text-sky-600 dark:bg-sky-500/10" />
-        <Stat label="Policy xatolari" value={d.policyFailures} icon={ShieldAlert} tone="bg-rose-50 text-rose-600 dark:bg-rose-500/10" />
+        <Stat label="Siyosat xatolari" value={d.policyFailures} icon={ShieldAlert} tone="bg-rose-50 text-rose-600 dark:bg-rose-500/10" />
         <Stat label="Ma’lumot yetishmayotgan" value={d.devicesMissingData} icon={WifiOff} tone="bg-amber-50 text-amber-600 dark:bg-amber-500/10" />
         <Stat label="Ochiq ogohlantirishlar" value={d.openAlerts} icon={AlertTriangle} tone="bg-orange-50 text-orange-600 dark:bg-orange-500/10" />
       </div>

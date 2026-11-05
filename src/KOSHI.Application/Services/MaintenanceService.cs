@@ -56,7 +56,7 @@ public sealed class MaintenanceService(IKoshiDbContext db, SettingsService setti
             db.Alerts.Add(new Alert
             {
                 Id = Guid.NewGuid(), DeviceId = d.Id, Type = AlertType.DeviceOffline, Severity = AlertSeverity.Info, DedupKey = key, CreatedAt = now,
-                Message = $"{d.DisplayName} has not sent a heartbeat since {d.LastHeartbeatAt:yyyy-MM-dd HH:mm} UTC.",
+                Message = $"{d.DisplayName} kompyuteri {d.LastHeartbeatAt:yyyy-MM-dd HH:mm} (UTC) dan beri signal yubormadi — oflayn bo‘lishi mumkin.",
             });
             created++;
         }

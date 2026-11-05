@@ -21,6 +21,12 @@ public static class Cli
             return 5;
         }
 
+        if (args[0] == "heal")
+        {
+            SelfHeal.Run();
+            return 0;
+        }
+
         if (args[0] == "deactivate")
         {
             if (!UpgradeGate.IsOpen)
@@ -28,6 +34,7 @@ public static class Cli
                 Console.Error.WriteLine("Deactivation is disabled.");
                 return 5;
             }
+            SelfHeal.Unregister();
             var rollback = AppLockerAdapter.Rollback();
             AgentStore.Delete();
             Console.WriteLine($"Deactivated. AppLocker: {rollback.Message}");
@@ -53,7 +60,7 @@ public static class Cli
                 OsVersion = WindowsEdition.Describe(),
                 AgentVersion = AgentInfo.Version,
             }, CancellationToken.None);
-            AgentStore.Save(new AgentConfig(api.BaseAddress.ToString().TrimEnd('/'), res.DeviceId, res.DisplayName, DateTime.UtcNow), res.DeviceCredential);
+            AgentStore.Save(new AgentConfig(api.BaseAddress.ToString().TrimEnd('/'), res.DeviceId, res.DisplayName, DateTime.UtcNow, res.LicenseExpiresAt), res.DeviceCredential);
             Console.WriteLine($"Activated as '{res.DisplayName}' ({res.DeviceId}).");
             return 0;
         }

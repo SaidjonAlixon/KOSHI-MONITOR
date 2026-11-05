@@ -41,27 +41,32 @@ public sealed class DeviceService(
             UpdatedAt = now,
         };
         db.Devices.Add(device);
-        var (code, activation) = NewActivation(device.Id, r.ActivationCodeTtlMinutes, now);
+        var licenseDays = NormalizeLicenseDays(r.LicenseDays);
+        device.LicenseExpiresAt = LicenseUntil(licenseDays, now);
+        var (code, activation) = NewActivation(device.Id, r.ActivationCodeTtlMinutes, now, licenseDays);
         db.DeviceActivations.Add(activation);
-        audit.Record("device.create", "Device", device.Id, new { device.DisplayName, device.EmployeeId, activation.ExpiresAt });
+        audit.Record("device.create", "Device", device.Id, new { device.DisplayName, device.EmployeeId, activation.ExpiresAt, licenseDays });
         await db.SaveChangesAsync(ct);
-        return new ActivationCodeResponse(device.Id, code, activation.ExpiresAt);
+        return new ActivationCodeResponse(device.Id, code, activation.ExpiresAt, licenseDays);
     }
 
-    public async Task<ActivationCodeResponse> IssueActivationCodeAsync(Guid deviceId, int ttlMinutes, CancellationToken ct = default)
+    public async Task<ActivationCodeResponse> IssueActivationCodeAsync(Guid deviceId, int ttlMinutes, int? licenseDays = null, CancellationToken ct = default)
     {
         var device = await db.Devices.FirstOrDefaultAsync(d => d.Id == deviceId && d.DeletedAt == null, ct) ?? throw Errors.NotFound("Device");
         if (device.Status == DeviceStatus.Blocked) throw Errors.Conflict("Unblock the device before issuing a new activation code.");
 
         var now = Now;
+        var days = NormalizeLicenseDays(licenseDays);
         var open = await db.DeviceActivations.Where(a => a.DeviceId == deviceId && a.UsedAt == null && a.InvalidatedAt == null).ToListAsync(ct);
         foreach (var a in open) a.InvalidatedAt = now;
 
-        var (code, activation) = NewActivation(deviceId, ttlMinutes, now);
+        var (code, activation) = NewActivation(deviceId, ttlMinutes, now, days);
         db.DeviceActivations.Add(activation);
-        audit.Record("device.activation_code_issued", "Device", deviceId, new { activation.ExpiresAt, invalidatedPrevious = open.Count });
+        device.LicenseExpiresAt = LicenseUntil(days, now);
+        device.UpdatedAt = now;
+        audit.Record("device.activation_code_issued", "Device", deviceId, new { activation.ExpiresAt, licenseDays = days, invalidatedPrevious = open.Count });
         await db.SaveChangesAsync(ct);
-        return new ActivationCodeResponse(deviceId, code, activation.ExpiresAt);
+        return new ActivationCodeResponse(deviceId, code, activation.ExpiresAt, days);
     }
 
     public async Task<DeviceActivationResponse> ActivateAsync(DeviceActivationRequest r, CancellationToken ct = default)
@@ -96,12 +101,15 @@ public sealed class DeviceService(
         device.AgentVersion = r.AgentVersion?.Trim();
         device.ActivatedAt = now;
         device.RevokedAt = null;
+        device.LicenseExpiresAt = device.LicenseExpiresAt is { } until && until > now
+            ? until
+            : LicenseUntil(activation.LicenseDays, now);
         device.UpdatedAt = now;
 
-        audit.Record("device.activate", "Device", device.Id, new { device.Hostname, revokedPreviousCredentials = existing.Count }, deviceId: device.Id);
+        audit.Record("device.activate", "Device", device.Id, new { device.Hostname, device.LicenseExpiresAt, revokedPreviousCredentials = existing.Count }, deviceId: device.Id);
         await db.SaveChangesAsync(ct);
         logger.LogInformation("Device {DeviceId} activated", device.Id);
-        return new DeviceActivationResponse(device.Id, SecretUtil.FormatDeviceCredential(credential.Id, secret), device.DisplayName);
+        return new DeviceActivationResponse(device.Id, SecretUtil.FormatDeviceCredential(credential.Id, secret), device.DisplayName, device.LicenseExpiresAt);
     }
 
     public async Task<DeviceAuthResult> AuthenticateAsync(string? presented, CancellationToken ct = default)
@@ -111,7 +119,7 @@ public sealed class DeviceService(
         var credential = await db.DeviceCredentials.Include(c => c.Device).FirstOrDefaultAsync(c => c.Id == credentialId, ct);
         if (credential?.Device is null) return DeviceAuthResult.Invalid;
         if (!SecretUtil.FixedTimeEqualsHex(credential.SecretHash, SecretUtil.Sha256Hex(secret))) return DeviceAuthResult.Invalid;
-        if (credential.RevokedAt is not null || credential.Device.Status == DeviceStatus.Revoked || credential.Device.DeletedAt is not null)
+        if (credential.RevokedAt is not null || credential.Device.Status == DeviceStatus.Revoked || credential.Device.DeletedAt is not null || IsLicenseExpired(credential.Device, Now))
             return DeviceAuthResult.Revoked;
 
         var now = Now;
@@ -127,7 +135,8 @@ public sealed class DeviceService(
     {
         var now = Now;
         var device = await db.Devices.FirstOrDefaultAsync(d => d.Id == deviceId, ct) ?? throw Errors.NotFound("Device");
-        if (device.Status == DeviceStatus.Revoked) throw Errors.CredentialRevoked();
+        if (device.Status == DeviceStatus.Revoked || device.DeletedAt is not null || IsLicenseExpired(device, now))
+            throw Errors.CredentialRevoked();
 
         var allowed = device.Status == DeviceStatus.Active;
         var effective = await policies.ResolveEffectiveAsync(device, ct);
@@ -171,7 +180,7 @@ public sealed class DeviceService(
 
         await db.SaveChangesAsync(ct);
         await notifier.DeviceChangedAsync(deviceId, ct);
-        return new HeartbeatResponse(now, allowed, effective?.PolicyId, effective?.Version);
+        return new HeartbeatResponse(now, allowed, effective?.PolicyId, effective?.Version, device.LicenseExpiresAt);
     }
 
     public async Task<PagedResult<DeviceDto>> ListAsync(DeviceQuery q, CancellationToken ct = default)
@@ -209,14 +218,73 @@ public sealed class DeviceService(
         var total = await query.LongCountAsync(ct);
         var items = await query.Skip((q.Page - 1) * q.PageSize).Take(q.PageSize).ToListAsync(ct);
         var threshold = TimeSpan.FromSeconds(s.OfflineThresholdSeconds);
-        return new PagedResult<DeviceDto>(items.Select(d => ToDto(d, now, threshold)).ToList(), q.Page, q.PageSize, total);
+        var codeExpiry = await ActivationExpiryAsync(items.Select(d => d.Id).ToList(), ct);
+        return new PagedResult<DeviceDto>(items.Select(d => ToDto(d, now, threshold, s.AgentProtectionPasswordSet, codeExpiry.GetValueOrDefault(d.Id))).ToList(), q.Page, q.PageSize, total);
     }
 
     public async Task<DeviceDto> GetAsync(Guid id, CancellationToken ct = default)
     {
         var s = await settings.GetAsync(ct);
         var d = await LoadAsync(id, ct);
-        return ToDto(d, Now, TimeSpan.FromSeconds(s.OfflineThresholdSeconds));
+        var codeExpiry = await ActivationExpiryAsync([id], ct);
+        return ToDto(d, Now, TimeSpan.FromSeconds(s.OfflineThresholdSeconds), s.AgentProtectionPasswordSet, codeExpiry.GetValueOrDefault(id));
+    }
+
+    /// <summary>Turns the Windows-Settings lock ("Tizim himoyasi") on or off for one computer only.</summary>
+    public async Task<DeviceDto> SetProtectionAsync(Guid id, bool? enabled, CancellationToken ct = default)
+    {
+        var device = await db.Devices.FirstOrDefaultAsync(d => d.Id == id && d.DeletedAt == null, ct) ?? throw Errors.NotFound("Qurilma");
+        var on = enabled == true;
+        if (on)
+        {
+            var prot = await settings.GetProtectionAsync(ct);
+            if (string.IsNullOrEmpty(prot.Hash))
+                throw Errors.Validation("enabled", "Avval Sozlamalar → Tizim himoyasi bo‘limida himoya parolini o‘rnating, so‘ng shu kompyuterga himoyani yoqing.");
+        }
+        device.ProtectionEnabled = on;
+        device.UpdatedAt = Now;
+        audit.Record("device.protection", "Device", id, new { enabled = on });
+        await db.SaveChangesAsync(ct);
+        return await GetAsync(id, ct);
+    }
+
+    /// <summary>VPN / new-install lock for one computer. Null means follow the organization default.</summary>
+    public async Task<DeviceDto> SetNetworkControlsAsync(Guid id, bool? vpnBlocked, bool? installBlocked, CancellationToken ct = default)
+    {
+        var device = await db.Devices.FirstOrDefaultAsync(d => d.Id == id && d.DeletedAt == null, ct) ?? throw Errors.NotFound("Qurilma");
+        if (installBlocked == true)
+        {
+            var prot = await settings.GetProtectionAsync(ct);
+            if (string.IsNullOrEmpty(prot.Hash))
+                throw Errors.Validation("installBlocked", "Avval Sozlamalar → Tizim himoyasi bo‘limida himoya parolini o‘rnating.");
+        }
+        device.VpnBlocked = vpnBlocked;
+        device.InstallBlocked = installBlocked;
+        device.UpdatedAt = Now;
+        audit.Record("device.controls", "Device", id, new { vpnBlocked, installBlocked });
+        await db.SaveChangesAsync(ct);
+        return await GetAsync(id, ct);
+    }
+
+    /// <summary>Extends or makes permanent the device license. Unused activation codes keep the same duration.</summary>
+    public async Task<DeviceDto> SetLicenseAsync(Guid id, int? licenseDays, CancellationToken ct = default)
+    {
+        var device = await db.Devices.FirstOrDefaultAsync(d => d.Id == id && d.DeletedAt == null, ct) ?? throw Errors.NotFound("Qurilma");
+        var days = NormalizeLicenseDays(licenseDays);
+        var now = Now;
+        device.LicenseExpiresAt = LicenseUntil(days, now);
+        device.UpdatedAt = now;
+        var open = await db.DeviceActivations.Where(a => a.DeviceId == id && a.UsedAt == null && a.InvalidatedAt == null).ToListAsync(ct);
+        foreach (var a in open)
+        {
+            a.LicenseDays = days;
+            if (a.ExpiresAt < now.AddHours(1))
+                a.ExpiresAt = now.AddHours(24);
+        }
+        audit.Record("device.license", "Device", id, new { licenseDays = days, licenseExpiresAt = device.LicenseExpiresAt });
+        await db.SaveChangesAsync(ct);
+        await notifier.DeviceChangedAsync(id, ct);
+        return await GetAsync(id, ct);
     }
 
     public async Task<DeviceDto> UpdateAsync(Guid id, UpdateDeviceRequest r, CancellationToken ct = default)
@@ -257,6 +325,16 @@ public sealed class DeviceService(
         audit.Record("device.unblock", "Device", id);
         await db.SaveChangesAsync(ct);
         return await GetAsync(id, ct);
+    }
+
+    /// <summary>Marks the device revoked after an admin requested the agent be removed from the computer.</summary>
+    public async Task<DeviceDto> MarkRemoteUninstallAsync(Guid id, CancellationToken ct = default)
+    {
+        var device = await db.Devices.AsNoTracking().FirstOrDefaultAsync(d => d.Id == id && d.DeletedAt == null, ct)
+                     ?? throw Errors.NotFound("Device");
+        audit.Record("device.uninstall_remote", "Device", id, new { device.DisplayName, device.Hostname });
+        await db.SaveChangesAsync(ct);
+        return await RevokeAsync(id, ct);
     }
 
     public async Task<DeviceDto> RevokeAsync(Guid id, CancellationToken ct = default)
@@ -317,12 +395,14 @@ public sealed class DeviceService(
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task<IReadOnlyList<DeviceConnectionDto>> ConnectionsAsync(Guid id, int days, CancellationToken ct = default)
+    public async Task<IReadOnlyList<DeviceConnectionDto>> ConnectionsAsync(Guid id, int days, DateTime? from = null, DateTime? to = null, CancellationToken ct = default)
     {
         await LoadAsync(id, ct);
-        var since = Now.AddDays(-Math.Clamp(days, 1, 90));
+        var now = Now;
+        var windowFrom = from is { } f ? TelemetryService.ToUtc(f) : now.AddDays(-Math.Clamp(days, 1, 90));
+        var windowTo = to is { } t ? TelemetryService.ToUtc(t) : now.AddDays(1);
         var rows = await db.DeviceConnections.AsNoTracking()
-            .Where(c => c.DeviceId == id && (c.DisconnectedAt == null || c.DisconnectedAt >= since))
+            .Where(c => c.DeviceId == id && c.ConnectedAt < windowTo && (c.DisconnectedAt == null || c.DisconnectedAt >= windowFrom))
             .OrderByDescending(c => c.ConnectedAt).Take(500).ToListAsync(ct);
         return rows.Select(c => new DeviceConnectionDto(c.ConnectedAt, c.DisconnectedAt, c.DurationSeconds)).ToList();
     }
@@ -346,6 +426,7 @@ public sealed class DeviceService(
         device.UpdatedAt = now;
         audit.Record("device.delete", "Device", id, new { device.DisplayName, device.Hostname, revokedCredentials = credentials.Count });
         await db.SaveChangesAsync(ct);
+        await notifier.DeviceChangedAsync(id, ct);
         logger.LogInformation("Device {DeviceId} deleted (soft)", id);
     }
 
@@ -374,7 +455,7 @@ public sealed class DeviceService(
             throw Errors.Validation("EmployeeId", "Employee not found.");
     }
 
-    private static (string Code, DeviceActivation Activation) NewActivation(Guid deviceId, int ttlMinutes, DateTime now)
+    private static (string Code, DeviceActivation Activation) NewActivation(Guid deviceId, int ttlMinutes, DateTime now, int? licenseDays)
     {
         var code = SecretUtil.NewActivationCode();
         return (code, new DeviceActivation
@@ -384,13 +465,32 @@ public sealed class DeviceService(
             CodeHash = SecretUtil.Sha256Hex(SecretUtil.NormalizeActivationCode(code)),
             CreatedAt = now,
             ExpiresAt = now.AddMinutes(ttlMinutes),
+            LicenseDays = licenseDays,
         });
     }
 
-    internal static DeviceDto ToDto(Device d, DateTime now, TimeSpan threshold) => new(
+    private static int? NormalizeLicenseDays(int? days) => days is > 0 ? days : null;
+
+    private static DateTime? LicenseUntil(int? days, DateTime now) => days is > 0 ? now.AddDays(days.Value) : null;
+
+    private static bool IsLicenseExpired(Device d, DateTime now) => d.LicenseExpiresAt is { } exp && exp <= now;
+
+    private async Task<Dictionary<Guid, DateTime?>> ActivationExpiryAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct)
+    {
+        if (ids.Count == 0) return [];
+        var rows = await db.DeviceActivations.AsNoTracking()
+            .Where(a => ids.Contains(a.DeviceId) && a.UsedAt == null && a.InvalidatedAt == null)
+            .Select(a => new { a.DeviceId, a.ExpiresAt })
+            .ToListAsync(ct);
+        return rows.GroupBy(x => x.DeviceId).ToDictionary(g => g.Key, g => (DateTime?)g.Max(x => x.ExpiresAt));
+    }
+
+    internal static DeviceDto ToDto(Device d, DateTime now, TimeSpan threshold, bool protectionPasswordSet = false, DateTime? activationExpiresAt = null) => new(
         d.Id, d.DisplayName, d.Hostname, d.OsVersion, d.AgentVersion, d.Status.ToString(), d.IsOnline(now, threshold),
         d.LastHeartbeatAt, d.EmployeeId, d.Employee?.FullName, d.Employee?.DepartmentId, d.Employee?.Department?.Name,
-        d.MonitoringEnabled, d.AppliedPolicyId, d.AppliedPolicyVersion, d.CreatedAt, d.ActivatedAt, d.BlockReason);
+        d.MonitoringEnabled, d.AppliedPolicyId, d.AppliedPolicyVersion, d.CreatedAt, d.ActivatedAt, d.BlockReason,
+        d.ProtectionEnabled == true, protectionPasswordSet, d.LicenseExpiresAt, activationExpiresAt,
+        d.VpnBlocked, d.InstallBlocked);
 
     private DateTime Now => clock.GetUtcNow().UtcDateTime;
 }

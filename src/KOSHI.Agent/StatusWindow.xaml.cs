@@ -14,11 +14,13 @@ namespace KOSHI.Agent;
 
 public partial class StatusWindow : Window
 {
-    public enum Section { Status, Policy, Support }
+    public enum Section { Status, Support }
 
     private readonly Dictionary<Guid, (Border Bubble, TextBlock Body, TextBlock Meta, DateTime CreatedAt, bool FromAdmin)> _items = [];
     private readonly DispatcherTimer _typingTimer;
+    private readonly DispatcherTimer _licenseTimer;
     private AvailableUpdateInfo? _availableUpdate;
+    private DateTime? _licenseUntil;
 
     public Func<string, Task<bool>>? ChatSendRequested { get; set; }
     public Action? TypingTriggered { get; set; }
@@ -37,6 +39,8 @@ public partial class StatusWindow : Window
             _typingTimer.Stop();
             TypingText.Visibility = Visibility.Collapsed;
         };
+        _licenseTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _licenseTimer.Tick += (_, _) => PaintLicense();
         Activated += (_, _) => WindowActivatedForRead?.Invoke();
     }
 
@@ -176,7 +180,7 @@ public partial class StatusWindow : Window
     {
         var (title, detail, bg, fg) = s.State switch
         {
-            AgentState.Online => ("Monitoring faol — serverga ulangan", "Faol dastur va faol/bo'sh vaqt tashkilot siyosatiga muvofiq yuborilmoqda.", "#ECFDF5", "#065F46"),
+            AgentState.Online => ("Qurilma faol", "Monitoring ishlamoqda.", "#ECFDF5", "#065F46"),
             AgentState.Connecting => ("Serverga ulanmoqda…", "Ma'lumotlar vaqtincha kompyuterda saqlanadi.", "#EFF6FF", "#1E40AF"),
             AgentState.Offline => ("Server bilan aloqa yo'q", $"Ma'lumotlar lokal navbatda saqlanmoqda ({s.QueueLength} paket) va aloqa tiklanganda yuboriladi.", "#FFFBEB", "#92400E"),
             AgentState.Blocked => ("Qurilma administrator tomonidan bloklangan", "Monitoring to'xtatilgan, ma'lumot yuborilmaydi.", "#FEF2F2", "#991B1B"),
@@ -189,18 +193,25 @@ public partial class StatusWindow : Window
         StatusBox.BorderBrush = Brush(fg, 0x40);
         StatusText.Foreground = StatusDetail.Foreground = Brush(fg);
 
-        ServerText.Text = s.ServerUrl ?? "sozlanmagan";
-        DeviceText.Text = s.DeviceName ?? "—";
-        MonitoringText.Text = s.MonitoringActive ? "Yoqilgan" : "To'xtatilgan";
-        PolicyText.Text = s.PolicyName is null ? "standart" : $"{s.PolicyName} (v{s.PolicyVersion})";
-        SyncText.Text = s.LastSync?.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss") ?? "—";
-        LocationText.Text = s.LocationInfo ?? "aniqlanmoqda…";
         if (_availableUpdate is null)
         {
             AutoUpdateText.Text = s.AutoUpdateEnabled ? "Bildirishnoma yoqilgan" : "Faqat qo‘lda";
             AutoUpdateText.Foreground = Brush(s.AutoUpdateEnabled ? "#047857" : "#64748B");
         }
-        NoticeText.Text = s.MonitoringNotice;
+
+        var enrolled = s.State is not AgentState.NotActivated;
+        LicensePanel.Visibility = enrolled ? Visibility.Visible : Visibility.Collapsed;
+        _licenseUntil = s.LicenseExpiresAt;
+        if (enrolled)
+        {
+            PaintLicense();
+            if (!_licenseTimer.IsEnabled) _licenseTimer.Start();
+        }
+        else
+        {
+            _licenseTimer.Stop();
+        }
+
         ActivateButton.Visibility = s.State is AgentState.NotActivated or AgentState.Revoked ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -208,11 +219,43 @@ public partial class StatusWindow : Window
     {
         FrameworkElement target = section switch
         {
-            Section.Policy => PolicySection,
             Section.Support => SupportSection,
             _ => StatusSection,
         };
         target.BringIntoView();
+    }
+
+    private void PaintLicense()
+    {
+        if (_licenseUntil is null)
+        {
+            LicenseTitle.Text = "Aktivatsiya";
+            LicenseTitle.Foreground = Brush("#64748B");
+            LicenseValue.Text = "Doimiy";
+            LicenseChip.Background = Brush("#ECFDF5");
+            LicenseChip.BorderBrush = Brush("#A7F3D0");
+            LicenseValue.Foreground = Brush("#047857");
+            LicensePanel.Background = Brush("#F8FAFC");
+            LicensePanel.BorderBrush = Brush("#E2E8F0");
+            return;
+        }
+
+        var remain = _licenseUntil.Value.ToUniversalTime() - DateTime.UtcNow;
+        if (remain < TimeSpan.Zero) remain = TimeSpan.Zero;
+        var expired = remain <= TimeSpan.Zero;
+        var warn = !expired && remain.TotalHours < 24;
+        LicenseTitle.Text = expired ? "Aktivatsiya muddati tugagan" : "Aktivatsiya tugashiga";
+        LicenseTitle.Foreground = Brush("#64748B");
+        LicenseValue.Text = expired
+            ? "Tugagan"
+            : remain.TotalDays >= 1
+                ? $"{(int)remain.TotalDays} kun  {remain.Hours:00}:{remain.Minutes:00}:{remain.Seconds:00}"
+                : $"{remain.Hours:00}:{remain.Minutes:00}:{remain.Seconds:00}";
+        LicenseChip.Background = Brush(expired ? "#FEF2F2" : warn ? "#FFFBEB" : "#EEF1FF");
+        LicenseChip.BorderBrush = Brush(expired ? "#FECDD3" : warn ? "#FCD34D" : "#C7D2FE");
+        LicenseValue.Foreground = Brush(expired ? "#B91C1C" : warn ? "#B45309" : "#4338CA");
+        LicensePanel.Background = Brush("#F8FAFC");
+        LicensePanel.BorderBrush = Brush("#E2E8F0");
     }
 
     private void OnActivate(object sender, RoutedEventArgs e) => new ActivationWindow { Owner = this }.ShowDialog();

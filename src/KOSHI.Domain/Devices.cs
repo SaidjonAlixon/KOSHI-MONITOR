@@ -14,6 +14,10 @@ public sealed class Device
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public DateTime? ActivatedAt { get; set; }
+
+    /// <summary>When the enrollment license ends. Null means permanent.</summary>
+    public DateTime? LicenseExpiresAt { get; set; }
+
     public DateTime? BlockedAt { get; set; }
     public DateTime? RevokedAt { get; set; }
     public DateTime? LastHeartbeatAt { get; set; }
@@ -24,6 +28,15 @@ public sealed class Device
     /// <summary>Time the agent channel last disconnected (exact "offline since").</summary>
     public DateTime? DisconnectedAt { get; set; }
     public bool MonitoringEnabled { get; set; }
+
+    /// <summary>Windows Settings lock ("Tizim himoyasi") for this computer only. true = lock, false/null = unlocked.</summary>
+    public bool? ProtectionEnabled { get; set; }
+
+    /// <summary>VPN lock for this computer. Null = follow the organization default.</summary>
+    public bool? VpnBlocked { get; set; }
+
+    /// <summary>New-software install lock for this computer. Null = follow the organization default.</summary>
+    public bool? InstallBlocked { get; set; }
 
     // Snapshot of the current foreground activity, refreshed by heartbeats (used by Live Monitoring).
     public string? CurrentProcessName { get; set; }
@@ -48,6 +61,9 @@ public sealed class DeviceActivation
     public string CodeHash { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; }
     public DateTime ExpiresAt { get; set; }
+
+    /// <summary>License length applied when this code is used. Null or 0 = permanent.</summary>
+    public int? LicenseDays { get; set; }
     public DateTime? UsedAt { get; set; }
     public DateTime? InvalidatedAt { get; set; }
     public Guid? CreatedByUserId { get; set; }
@@ -79,6 +95,7 @@ public sealed class DeviceConnection
     public DateTime? DisconnectedAt { get; set; }
     public string? ConnectionId { get; set; }
 
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
     public int? DurationSeconds => DisconnectedAt is { } d ? (int)Math.Max(0, (d - ConnectedAt).TotalSeconds) : null;
 }
 

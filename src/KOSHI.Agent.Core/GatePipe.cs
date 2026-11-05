@@ -17,6 +17,8 @@ public static class GatePipe
     public const string OpDeny = "deny";
     public const string OpRefresh = "refresh";
     public const string OpPrepareUpgrade = "prepare-upgrade";
+    public const string OpRunSetup = "run-setup";
+    public const string OpUninstall = "uninstall-self";
 
     public static async Task<GateResponse?> SendAsync(GateRequest request, TimeSpan timeout, CancellationToken ct = default)
     {
@@ -64,6 +66,7 @@ public sealed class GateRequest
     public string Op { get; set; } = GatePipe.OpPending;
     public Guid? Id { get; set; }
     public string? Password { get; set; }
+    public string? Path { get; set; }
 }
 
 /// <summary>An installer frozen by the service until the protection password is entered.</summary>

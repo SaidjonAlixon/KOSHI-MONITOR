@@ -17,6 +17,10 @@ public sealed class User
     public string NormalizedEmail { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
+
+    /// <summary>AES-sealed copy of the password so Super Admin can view it. Login still verifies PasswordHash.</summary>
+    public string? PasswordSecret { get; set; }
+
     public bool IsActive { get; set; } = true;
 
     /// <summary>Reserved for TOTP/WebAuthn second factor; login flow already returns mfaRequired when set.</summary>
