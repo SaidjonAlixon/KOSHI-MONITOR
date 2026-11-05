@@ -141,6 +141,27 @@ function LicenseTimer({ until, onEdit }: { until: string | null | undefined; onE
   )
 }
 
+/** One-time code validity — separate from the activation (license) duration. */
+function CodeExpiry({ until }: { until: string }) {
+  const p = remainingParts(until)
+  useNowTick(!p.expired)
+  return (
+    <p className={`mt-1 text-[11px] ${p.expired ? 'text-rose-600' : 'text-slate-500'}`}>
+      {p.expired ? (
+        'Kod muddati tugagan — yangi kod yarating'
+      ) : (
+        <>
+          Kodni kiritish uchun:{' '}
+          <span className="font-mono tabular-nums">
+            {p.days > 0 ? `${p.days} kun ` : ''}
+            {pad2(p.hours)}:{pad2(p.minutes)}:{pad2(p.seconds)}
+          </span>
+        </>
+      )}
+    </p>
+  )
+}
+
 function LicenseDurationField({ hint }: { hint?: string }) {
   const [mode, setMode] = useState('0')
   return (
@@ -533,7 +554,7 @@ export function DevicesPage() {
           ) : (
             <ul className="divide-y divide-slate-100 dark:divide-white/5">
               {q.data.items.map((d) => {
-                const licenseUntil = d.licenseExpiresAt ?? (d.status === 'Pending' ? d.activationExpiresAt : null)
+                const licenseUntil = d.licenseExpiresAt
                 const showTimer = d.status === 'Pending' || d.status === 'Active' || d.status === 'Blocked'
                 const missingKey = d.status === 'Pending' && !d.licenseExpiresAt && !d.activationExpiresAt
                 return (
@@ -569,7 +590,10 @@ export function DevicesPage() {
                           {missingKey ? (
                             <p className="text-xs font-medium text-rose-600">Kalit yo‘q — yangi kod yarating</p>
                           ) : showTimer ? (
-                            <LicenseTimer until={licenseUntil} onEdit={manage ? () => setExtending(d) : undefined} />
+                            <>
+                              <LicenseTimer until={licenseUntil} onEdit={manage ? () => setExtending(d) : undefined} />
+                              {d.status === 'Pending' && d.activationExpiresAt && <CodeExpiry until={d.activationExpiresAt} />}
+                            </>
                           ) : (
                             <span className="text-xs text-slate-400">—</span>
                           )}
