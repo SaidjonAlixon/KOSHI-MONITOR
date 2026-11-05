@@ -47,19 +47,30 @@ public sealed class WebFilterEnforcer(ILogger logger)
     };
 
     private string? _lastSignature;
+    private HashSet<string> _lastDomains = new(StringComparer.OrdinalIgnoreCase);
 
-    public void Apply(IReadOnlyCollection<string> blockedDomains, bool forceDirectConnection)
+    /// <param name="allowedDomains">Sites with an active timed permission; they and their CDNs win over companions of other blocked sites.</param>
+    public void Apply(IReadOnlyCollection<string> blockedDomains, IReadOnlyCollection<string> allowedDomains, bool forceDirectConnection)
     {
-        var domains = Expand(blockedDomains);
+        var allowed = Expand(allowedDomains).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var domains = Expand(blockedDomains).Where(d => !allowed.Contains(d)).ToList();
         var signature = $"{string.Join('|', domains)}#{forceDirectConnection}";
         if (signature == _lastSignature) return;
 
+        var newlyBlocked = domains.Any(d => !_lastDomains.Contains(d));
         var ok = TryStep("hosts", () => WriteHosts(domains));
         ok &= TryStep("chromium", () => WriteChromium(domains, forceDirectConnection));
         ok &= TryStep("firefox", () => WriteFirefox(domains, forceDirectConnection));
         TryStep("flushdns", FlushDns);
-        if (ok) _lastSignature = signature;
-        logger.LogInformation("Web filter applied: {Count} blocked domains, direct connection forced: {Direct}", domains.Count, forceDirectConnection);
+        // Chromium browsers only re-read registry policies on a Group Policy notification.
+        TryStep("gprefresh", BrowserNet.RefreshPolicies);
+        if (newlyBlocked) TryStep("reset", () => BrowserNet.ResetBrowserConnections(logger));
+        if (ok)
+        {
+            _lastSignature = signature;
+            _lastDomains = domains.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+        logger.LogInformation("Web filter applied: {Count} blocked domains, {Allowed} allowed, direct connection forced: {Direct}", domains.Count, allowed.Count, forceDirectConnection);
     }
 
     private bool TryStep(string name, Action step)
@@ -137,10 +148,13 @@ public sealed class WebFilterEnforcer(ILogger logger)
                         list.SetValue((n++).ToString(System.Globalization.CultureInfo.InvariantCulture), pattern, RegistryValueKind.String);
                 }
                 key.SetValue("DnsOverHttpsMode", "off", RegistryValueKind.String);
+                // QUIC sessions survive TCP resets; TCP-only lets a new block cut open tabs at once.
+                key.SetValue("QuicAllowed", 0, RegistryValueKind.DWord);
             }
             else
             {
                 key.DeleteValue("DnsOverHttpsMode", throwOnMissingValue: false);
+                key.DeleteValue("QuicAllowed", throwOnMissingValue: false);
             }
 
             if (direct) key.SetValue("ProxyMode", "direct", RegistryValueKind.String);

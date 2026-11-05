@@ -40,12 +40,11 @@ public sealed class PolicyEnforcementWorker(ILogger<PolicyEnforcementWorker> log
                 if (state.Current is { } policy)
                 {
                     var now = DateTime.UtcNow;
-                    var blocked = (policy.BlockedSites ?? [])
-                        .Where(s => !AllowanceActive(s.AllowedUntil, now))
-                        .Select(s => s.Domain)
-                        .ToList();
+                    var sites = policy.BlockedSites ?? [];
+                    var blocked = sites.Where(s => !AllowanceActive(s.AllowedUntil, now)).Select(s => s.Domain).ToList();
+                    var allowed = sites.Where(s => AllowanceActive(s.AllowedUntil, now)).Select(s => s.Domain).ToList();
                     if (policy.VpnBlocked) blocked.AddRange(VpnCatalog.Domains);
-                    _webFilter.Apply(blocked, policy.VpnBlocked);
+                    _webFilter.Apply(blocked, allowed, policy.VpnBlocked);
                     _vpn.Tick(policy.VpnBlocked);
                     _wifi.Tick();
                 }
@@ -84,7 +83,7 @@ public sealed class PolicyEnforcementWorker(ILogger<PolicyEnforcementWorker> log
             {
                 logger.LogError(ex, "Policy enforcement cycle failed");
             }
-            await state.WaitForRefreshAsync(TimeSpan.FromSeconds(15), stoppingToken);
+            await state.WaitForRefreshAsync(TimeSpan.FromSeconds(5), stoppingToken);
         }
     }
 
